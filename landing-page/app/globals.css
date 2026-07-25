@@ -345,6 +345,365 @@ button {
   letter-spacing: 0.4px;
 }
 
+.concept-frame {
+  background: #101010;
+}
+
+.concept-progress {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid var(--hairline-soft);
+  background: var(--surface-1);
+}
+
+.concept-progress button {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 54px;
+  padding: 0 20px;
+  border: 0;
+  border-right: 1px solid var(--hairline-soft);
+  background: transparent;
+  color: #666;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 520;
+  text-align: left;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.concept-progress button:last-child {
+  border-right: 0;
+}
+
+.concept-progress button:hover {
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--ink);
+}
+
+.concept-progress button.is-current {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.concept-progress button span {
+  color: #555;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.5px;
+}
+
+.concept-progress button.is-current span {
+  color: var(--accent-blue);
+}
+
+.concept-viewport {
+  overflow: hidden;
+}
+
+.concept-track {
+  display: flex;
+  align-items: stretch;
+  transition: transform 650ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+
+.concept-slide {
+  flex: 0 0 100%;
+  min-width: 0;
+  min-height: 610px;
+}
+
+.problem-slide {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+}
+
+.problem-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 56px;
+  border-right: 1px solid var(--hairline-soft);
+  background: var(--surface-1);
+}
+
+.challenge-tags {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 28px;
+}
+
+.challenge-tags span {
+  padding: 6px 9px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink-muted);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.problem-copy .game-kicker {
+  margin-bottom: 20px;
+}
+
+.problem-copy h2,
+.thinking-intro h2 {
+  margin: 0;
+  font-size: clamp(42px, 5vw, 62px);
+  font-weight: 550;
+  line-height: 0.98;
+  letter-spacing: -0.05em;
+}
+
+.problem-copy > p,
+.thinking-intro > p {
+  max-width: 490px;
+  margin: 24px 0 34px;
+  color: var(--ink-muted);
+  font-size: 16px;
+  line-height: 1.45;
+  letter-spacing: -0.16px;
+}
+
+.concept-next {
+  align-self: flex-start;
+}
+
+.problem-example {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: 56px;
+  background:
+    radial-gradient(circle at 78% 20%, rgba(109, 40, 217, 0.16), transparent 38%),
+    #101010;
+}
+
+.example-label {
+  margin-bottom: 24px;
+  color: #666;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.7px;
+}
+
+.example-row {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 18px;
+  align-items: center;
+  padding: 15px 0;
+  border-top: 1px solid var(--hairline-soft);
+}
+
+.example-row > span {
+  color: #666;
+  font-size: 12px;
+}
+
+.example-row code {
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.price-strip {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin: 34px 0 26px;
+}
+
+.price-strip div {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 82px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: 10px;
+  background: var(--surface-1);
+}
+
+.price-strip small {
+  color: #5c5c5c;
+  font-family: var(--mono);
+  font-size: 8px;
+}
+
+.price-strip strong {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 520;
+}
+
+.price-strip .is-buy {
+  border-color: rgba(0, 153, 255, 0.45);
+  box-shadow: inset 0 0 24px rgba(0, 153, 255, 0.08);
+}
+
+.price-strip .is-sell {
+  border-color: rgba(97, 208, 135, 0.45);
+  box-shadow: inset 0 0 24px rgba(97, 208, 135, 0.08);
+}
+
+.problem-example > p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.problem-example > p strong {
+  color: var(--ink);
+  font-weight: 520;
+}
+
+.thinking-slide {
+  display: grid;
+  grid-template-columns: 0.75fr 1.25fr;
+  gap: 48px;
+  padding: 56px;
+  background:
+    radial-gradient(circle at 22% 15%, rgba(211, 41, 188, 0.12), transparent 34%),
+    #101010;
+}
+
+.thinking-intro {
+  align-self: center;
+}
+
+.thinking-intro .game-kicker {
+  margin-bottom: 20px;
+}
+
+.thinking-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-self: center;
+}
+
+.thinking-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 330px;
+  padding: 24px;
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+}
+
+.thinking-card--human {
+  background: linear-gradient(145deg, #2e1741, #161118 70%);
+}
+
+.thinking-card--machine {
+  background: var(--surface-1);
+}
+
+.thinking-card-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.thinking-card-heading span {
+  color: #777;
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.7px;
+}
+
+.thinking-card-heading strong {
+  font-size: 18px;
+  font-weight: 530;
+  letter-spacing: -0.45px;
+}
+
+.human-prices {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 5px;
+  margin: 46px 0 auto;
+}
+
+.human-prices span {
+  display: grid;
+  min-width: 0;
+  aspect-ratio: 1;
+  place-items: center;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.075);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.human-prices .is-buy {
+  background: var(--accent-blue);
+  color: var(--ink);
+}
+
+.human-prices .is-sell {
+  background: var(--success);
+  color: #06130a;
+}
+
+.machine-state {
+  display: grid;
+  gap: 9px;
+  margin: 34px 0 auto;
+}
+
+.machine-state div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 12px;
+  border-radius: 8px;
+  background: #0d0d0d;
+  font-family: var(--mono);
+}
+
+.machine-state span {
+  color: #666;
+  font-size: 9px;
+}
+
+.machine-state strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.thinking-card > p {
+  margin: 24px 0 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.concept-slide-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.play-slide {
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr;
+}
+
 .game-preview {
   display: grid;
   grid-template-columns: 0.85fr 1.15fr;
@@ -481,13 +840,32 @@ button {
   color: #676767;
   font-family: var(--mono);
   font-size: 9px;
+  white-space: nowrap;
+}
+
+.bar-slot .bar-bought {
+  background: var(--accent-blue);
+  box-shadow: 0 0 24px rgba(0, 153, 255, 0.18);
+}
+
+.bar-slot .bar-sold {
+  background: var(--success);
+  box-shadow: 0 0 24px rgba(97, 208, 135, 0.18);
+}
+
+.game-message {
+  min-height: 38px;
+  margin: 20px 0 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .move-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
-  margin-top: 28px;
+  margin-top: 14px;
 }
 
 .move-button {
@@ -496,8 +874,15 @@ button {
   border-radius: 10px;
   background: var(--surface-2);
   color: var(--ink);
+  cursor: pointer;
   font-size: 13px;
   font-weight: 520;
+  transition: background 180ms ease, color 180ms ease, transform 180ms ease;
+}
+
+.move-button:hover:not(:disabled) {
+  background: var(--surface-3);
+  transform: translateY(-2px);
 }
 
 .move-button span {
@@ -514,8 +899,66 @@ button {
   color: #080808;
 }
 
+.move-button--buy:hover:not(:disabled) {
+  background: #e8e8e8;
+}
+
+.move-button--sell:not(:disabled) {
+  background: rgba(97, 208, 135, 0.14);
+  color: var(--success);
+}
+
 .move-button:disabled {
   color: #555;
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.concept-back-link {
+  align-self: flex-start;
+  margin-top: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #707070;
+  cursor: pointer;
+  font-size: 12px;
+  transition: color 180ms ease;
+}
+
+.concept-back-link:hover {
+  color: var(--ink);
+}
+
+.game-result {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 14px;
+  align-items: center;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--surface-1);
+}
+
+.game-result div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.game-result div span {
+  color: #666;
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.5px;
+}
+
+.game-result div strong {
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 520;
 }
 
 .experience-note {
@@ -1067,17 +1510,24 @@ button {
 }
 
 @media (max-width: 980px) {
-  .game-preview {
+  .thinking-slide {
     grid-template-columns: 1fr;
   }
 
-  .game-copy {
-    border-right: 0;
-    border-bottom: 1px solid var(--hairline-soft);
+  .thinking-intro {
+    align-self: start;
   }
 
-  .game-board {
-    min-height: 500px;
+  .thinking-intro > p {
+    max-width: 700px;
+  }
+
+  .thinking-compare {
+    align-self: stretch;
+  }
+
+  .concept-slide-actions {
+    grid-column: 1;
   }
 
   .roadmap-card {
@@ -1176,6 +1626,32 @@ button {
 
   .hero-actions {
     justify-content: flex-start;
+  }
+
+  .concept-slide {
+    min-height: 900px;
+  }
+
+  .problem-slide,
+  .play-slide,
+  .game-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .problem-copy,
+  .game-copy {
+    border-right: 0;
+    border-bottom: 1px solid var(--hairline-soft);
+  }
+
+  .problem-copy,
+  .problem-example,
+  .thinking-slide {
+    padding: 44px;
+  }
+
+  .game-board {
+    min-height: 460px;
   }
 
   .manifesto {
@@ -1307,6 +1783,63 @@ button {
     display: block;
   }
 
+  .concept-progress button {
+    gap: 6px;
+    padding-inline: 12px;
+  }
+
+  .concept-progress button span {
+    display: none;
+  }
+
+  .concept-slide {
+    min-height: 1020px;
+  }
+
+  .problem-copy,
+  .problem-example,
+  .thinking-slide {
+    padding: 28px;
+  }
+
+  .problem-copy h2,
+  .thinking-intro h2 {
+    font-size: 42px;
+  }
+
+  .thinking-compare {
+    grid-template-columns: 1fr;
+  }
+
+  .thinking-card {
+    min-height: 240px;
+  }
+
+  .thinking-card > p {
+    margin-top: 20px;
+  }
+
+  .human-prices {
+    margin-top: 28px;
+  }
+
+  .concept-slide-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .concept-slide-actions .button {
+    width: 100%;
+  }
+
+  .price-strip {
+    gap: 5px;
+  }
+
+  .price-strip div {
+    min-height: 70px;
+  }
+
   .game-copy,
   .game-board {
     padding: 28px;
@@ -1324,6 +1857,14 @@ button {
 
   .move-row {
     gap: 6px;
+  }
+
+  .game-result {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .game-result .button {
+    grid-column: 1 / -1;
   }
 
   .experience-note {
@@ -1403,6 +1944,16 @@ button {
     grid-column: 1;
     grid-row: auto;
     margin-top: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .concept-track {
+    transition: none;
   }
 }
 

@@ -37,6 +37,9 @@ test("server-renders the LeetGame landing page", async () => {
   assert.match(html, /Don&#x27;t just solve it/);
   assert.match(html, /Feel how it works/);
   assert.match(html, /Challenge #122/);
+  assert.match(html, /Best Time to Buy and Sell Stock/);
+  assert.match(html, /Your eyes cheat\. The machine cannot\./);
+  assert.match(html, /You can only see today/);
   assert.match(html, /Reverse Integer/);
   assert.match(html, /\/leetgame-symbol\.svg/);
   assert.match(html, /https:\/\/leetgame\.example\/og\.png/);

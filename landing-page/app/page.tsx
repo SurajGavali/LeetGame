@@ -1,3 +1,5 @@
+import { ConceptWalkthrough } from "./concept-walkthrough";
+
 const githubUrl = "https://github.com/SurajGavali/LeetGame";
 
 const challenges = [
@@ -155,69 +157,9 @@ export default function Home() {
       </section>
 
       <section className="experience section-shell" id="experience">
-        <div className="product-frame">
-          <div className="product-toolbar">
-            <div className="traffic-lights" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </div>
-            <div className="product-title">
-              <span className="status-dot" />
-              Challenge #122 · Stock Trading
-            </div>
-            <span className="toolbar-meta">CASE 01</span>
-          </div>
-
-          <div className="game-preview">
-            <div className="game-copy">
-              <span className="game-kicker">Think like a computer</span>
-              <h2>You can only see today.</h2>
-              <p>
-                The future is hidden. Read one price, update your state, and
-                decide what the machine should do next.
-              </p>
-              <div className="state-readout">
-                <div>
-                  <span>DAY</span>
-                  <strong>02 / 06</strong>
-                </div>
-                <div>
-                  <span>PRICE</span>
-                  <strong>$1</strong>
-                </div>
-                <div>
-                  <span>STATE</span>
-                  <strong>Cash</strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="game-board" aria-label="Stock challenge preview">
-              <div className="chart-grid" aria-hidden="true">
-                {[72, 16, 40, 40, 40, 40].map((height, index) => (
-                  <div className="bar-slot" key={`${height}-${index}`}>
-                    <span className={index === 1 ? "bar-current" : index > 1 ? "bar-hidden" : ""} style={{ height: `${height}%` }} />
-                    <small>D{index + 1}</small>
-                  </div>
-                ))}
-              </div>
-              <div className="move-row">
-                <button type="button" className="move-button move-button--buy">
-                  <span>↗</span> Buy
-                </button>
-                <button type="button" className="move-button" disabled>
-                  <span>↘</span> Sell
-                </button>
-                <button type="button" className="move-button">
-                  <span>→</span> Skip
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ConceptWalkthrough />
         <p className="experience-note">
-          A product preview based on the working Flutter prototype.
+          A playable concept based on the working Flutter prototype.
           <span> No code editor. No syntax anxiety.</span>
         </p>
       </section>
