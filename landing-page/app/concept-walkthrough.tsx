@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const examplePrices = [7, 1, 5, 3, 6, 4];
 const challengeRounds = [
@@ -25,6 +25,8 @@ export function ConceptWalkthrough() {
   const [score, setScore] = useState(0);
   const [streak, setStreak] = useState(0);
   const [mistakes, setMistakes] = useState(0);
+  const [soundOn, setSoundOn] = useState(true);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const [message, setMessage] = useState(
     "i is pinned at index 0. Bit starts as j at index 1 and moves one array cell at a time.",
   );
@@ -41,93 +43,51 @@ export function ConceptWalkthrough() {
     attempts === 0 ? 100 : Math.round((comparisons / attempts) * 100);
 
   useEffect(() => {
-    if (step !== 2 || complete || resolved || candidateProfit >= 0) {
-      return;
-    }
-
-    const thinkTimer = setTimeout(() => {
-      setComparisons((currentComparisons) => currentComparisons + 1);
-      setResolved(true);
-      setResolvedVerdict("skip");
-      setStreak((currentStreak) => {
-        setScore(
-          (currentScore) => currentScore + 100 + currentStreak * 20,
-        );
-        return currentStreak + 1;
-      });
-      setMessage(
-        `I’m at j = ${sellDay}. prices[j] − prices[i] is $${sellPrice} − $${buyPrice} = $${candidateProfit}. My profit floor is $0, so a negative result can never become max. I’ll skip it automatically.`,
-      );
-    }, 700);
-
-    return () => clearTimeout(thinkTimer);
-  }, [
-    buyDay,
-    buyPrice,
-    candidateProfit,
-    complete,
-    resolved,
-    sellDay,
-    sellPrice,
-    step,
-  ]);
-
-  useEffect(() => {
-    if (
-      step !== 2 ||
-      complete ||
-      !resolved ||
-      resolvedVerdict !== "skip" ||
-      candidateProfit >= 0
-    ) {
-      return;
-    }
-
-    const moveTimer = setTimeout(() => {
-      if (sellDay < round.prices.length - 1) {
-        setSellDay((currentSellDay) => currentSellDay + 1);
-        setResolved(false);
-        setResolvedVerdict(null);
-        setMessage(
-          `Negative result skipped. I moved j to index ${sellDay + 1}, while i stays pinned at index ${buyDay}.`,
-        );
-        return;
+    return () => {
+      if (audioContextRef.current) {
+        void audioContextRef.current.close();
       }
+    };
+  }, []);
 
-      if (buyDay < round.prices.length - 2) {
-        const nextBuyDay = buyDay + 1;
-        setBuyDay(nextBuyDay);
-        setSellDay(nextBuyDay + 1);
-        setResolved(false);
-        setResolvedVerdict(null);
-        setMessage(
-          `The inner loop is finished for i = ${buyDay}. I moved i to ${nextBuyDay} and reset j to ${nextBuyDay + 1}.`,
-        );
-        return;
-      }
+  function playThoughtSound(
+    tone: "think" | "answer" | "wrong" = "think",
+    force = false,
+  ) {
+    if ((!soundOn && !force) || typeof window === "undefined") return;
 
-      setComplete(true);
-      setMessage(
-        `All ${totalComparisons} legal index pairs were checked. Bit’s maximum profit is $${bestProfit}.`,
-      );
-    }, 2200);
+    const context = audioContextRef.current ?? new AudioContext();
+    audioContextRef.current = context;
+    if (context.state === "suspended") void context.resume();
 
-    return () => clearTimeout(moveTimer);
-  }, [
-    bestProfit,
-    buyDay,
-    candidateProfit,
-    complete,
-    resolved,
-    resolvedVerdict,
-    round.prices.length,
-    sellDay,
-    step,
-    totalComparisons,
-  ]);
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    const now = context.currentTime;
+    const frequencies =
+      tone === "wrong"
+        ? [210, 155]
+        : tone === "answer"
+          ? [520, 760]
+          : [390, 560];
+
+    oscillator.type = tone === "think" ? "sine" : "triangle";
+    oscillator.frequency.setValueAtTime(frequencies[0], now);
+    oscillator.frequency.exponentialRampToValueAtTime(
+      frequencies[1],
+      now + 0.16,
+    );
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.075, now + 0.025);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.19);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(now);
+    oscillator.stop(now + 0.2);
+  }
 
   function goTo(nextStep: number) {
     setStep(nextStep);
+    if (nextStep === 2) playThoughtSound();
   }
 
   function resetGame(nextRound = false) {
@@ -151,6 +111,7 @@ export function ConceptWalkthrough() {
     setMessage(
       "New array loaded. i is pinned at index 0, and Bit starts checking with j at index 1.",
     );
+    playThoughtSound();
   }
 
   function reward() {
@@ -170,6 +131,7 @@ export function ConceptWalkthrough() {
 
     const expectedVerdict: Verdict = shouldUpdate ? "update" : "skip";
     if (verdict !== expectedVerdict) {
+      playThoughtSound("wrong");
       miss(
         shouldUpdate
           ? `$${candidateProfit} is greater than the current record of $${bestProfit}. Bit should update the maximum.`
@@ -178,6 +140,7 @@ export function ConceptWalkthrough() {
       return;
     }
 
+    playThoughtSound("answer");
     reward();
     setComparisons((currentComparisons) => currentComparisons + 1);
     setResolved(true);
@@ -189,6 +152,10 @@ export function ConceptWalkthrough() {
       setBestSellDay(sellDay);
       setMessage(
         `$${candidateProfit} beats the previous max of $${bestProfit}. Bit saved indexes [${buyDay}, ${sellDay}] as the new best pair.`,
+      );
+    } else if (candidateProfit < 0) {
+      setMessage(
+        `$${candidateProfit} is below the $0 floor. You helped Bit keep max at $${bestProfit} instead of saving a loss.`,
       );
     } else if (candidateProfit === 0) {
       setMessage(
@@ -205,6 +172,7 @@ export function ConceptWalkthrough() {
     if (!resolved || complete) return;
 
     if (sellDay < round.prices.length - 1) {
+      playThoughtSound();
       setSellDay((currentSellDay) => currentSellDay + 1);
       setResolved(false);
       setResolvedVerdict(null);
@@ -215,6 +183,7 @@ export function ConceptWalkthrough() {
     }
 
     if (buyDay < round.prices.length - 2) {
+      playThoughtSound();
       const nextBuyDay = buyDay + 1;
       setBuyDay(nextBuyDay);
       setSellDay(nextBuyDay + 1);
@@ -226,6 +195,7 @@ export function ConceptWalkthrough() {
       return;
     }
 
+    playThoughtSound("answer");
     setComplete(true);
     setMessage(
       `All ${totalComparisons} legal index pairs were checked. Bit’s maximum is $${bestProfit}.`,
@@ -451,18 +421,37 @@ export function ConceptWalkthrough() {
               <p className="run-progress-label">
                 {comparisons} / {totalComparisons} legal pairs checked
               </p>
-              <button
-                type="button"
-                className="concept-back-link"
-                onClick={() => goTo(1)}
-                tabIndex={step === 2 ? 0 : -1}
-              >
-                ← Review the mental model
-              </button>
+              <div className="game-tools">
+                <button
+                  type="button"
+                  className="sound-toggle"
+                  aria-pressed={soundOn}
+                  onClick={() => {
+                    const nextSoundOn = !soundOn;
+                    setSoundOn(nextSoundOn);
+                    if (nextSoundOn) playThoughtSound("think", true);
+                  }}
+                  tabIndex={step === 2 ? 0 : -1}
+                >
+                  <span aria-hidden="true">{soundOn ? "◖))" : "◖×"}</span>
+                  Sound {soundOn ? "on" : "off"}
+                </button>
+                <button
+                  type="button"
+                  className="concept-back-link"
+                  onClick={() => goTo(1)}
+                  tabIndex={step === 2 ? 0 : -1}
+                >
+                  ← Review the mental model
+                </button>
+              </div>
             </div>
 
             <div className="candy-game-board">
-              <aside className="thought-bubble thought-bubble--buy">
+              <aside
+                className="thought-bubble thought-bubble--buy"
+                key={`buy-thought-${buyDay}-${sellDay}`}
+              >
                 <span className="decision-kicker">
                   BIT&apos;S BUY MEMORY · OUTER LOOP
                 </span>
@@ -566,7 +555,10 @@ export function ConceptWalkthrough() {
                 </p>
               </div>
 
-              <aside className="thought-bubble thought-bubble--sell">
+              <aside
+                className="thought-bubble thought-bubble--sell"
+                key={`sell-thought-${buyDay}-${sellDay}`}
+              >
                 {complete ? (
                   <div className="map-complete">
                     <span className="decision-kicker">
@@ -616,41 +608,36 @@ export function ConceptWalkthrough() {
                     </code>
 
                     {!resolved ? (
-                      candidateProfit < 0 ? (
-                        <div className="auto-skip-card" aria-live="polite">
-                          <span>NEGATIVE RESULT · AUTO SKIP</span>
-                          <p>
-                            ${candidateProfit} is below my $0 floor. I cannot
-                            save a loss, so I&apos;ll skip this index and move j.
+                      <>
+                        <p className="bit-question">
+                          I got ${candidateProfit}. Is this greater than my
+                          saved max of ${bestProfit}? What should I do?
+                        </p>
+                        {candidateProfit < 0 ? (
+                          <p className="question-hint">
+                            Remember: maxProfit can stay at $0, but it must never
+                            become negative.
                           </p>
-                          <i aria-hidden="true" />
+                        ) : null}
+                        <div className="state-actions">
+                          <button
+                            type="button"
+                            onClick={() => chooseVerdict("skip")}
+                            tabIndex={step === 2 ? 0 : -1}
+                          >
+                            <span>KEEP MAX = ${bestProfit}</span>
+                            Tell Bit: skip it
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => chooseVerdict("update")}
+                            tabIndex={step === 2 ? 0 : -1}
+                          >
+                            <span>SET MAX = ${candidateProfit}</span>
+                            Tell Bit: update
+                          </button>
                         </div>
-                      ) : (
-                        <>
-                          <p>
-                            ${candidateProfit} is not negative. Is it greater
-                            than my saved max of ${bestProfit}?
-                          </p>
-                          <div className="state-actions">
-                            <button
-                              type="button"
-                              onClick={() => chooseVerdict("skip")}
-                              tabIndex={step === 2 ? 0 : -1}
-                            >
-                              <span>NOT GREATER</span>
-                              Skip this pair
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => chooseVerdict("update")}
-                              tabIndex={step === 2 ? 0 : -1}
-                            >
-                              <span>NEW RECORD</span>
-                              Update max
-                            </button>
-                          </div>
-                        </>
-                      )
+                      </>
                     ) : (
                       <div className="resolved-check">
                         <span
@@ -663,27 +650,21 @@ export function ConceptWalkthrough() {
                           {resolvedVerdict === "update"
                             ? `New maximum: $${candidateProfit}`
                             : candidateProfit < 0
-                              ? "Loss rejected · moving automatically"
-                              : "Pair skipped"}
+                              ? "Correct · the loss was not saved"
+                              : "Correct · pair skipped"}
                         </span>
-                        {candidateProfit < 0 ? (
-                          <div className="auto-move">
-                            Bit is moving j to the next index…
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            className="button button-primary"
-                            onClick={advanceBit}
-                            tabIndex={step === 2 ? 0 : -1}
-                          >
-                            {sellDay < round.prices.length - 1
-                              ? `Move Bit to index ${sellDay + 1}`
-                              : buyDay < round.prices.length - 2
-                                ? `Move i to index ${buyDay + 1}`
-                                : "Finish the scan"}
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          className="button button-primary"
+                          onClick={advanceBit}
+                          tabIndex={step === 2 ? 0 : -1}
+                        >
+                          {sellDay < round.prices.length - 1
+                            ? `Help Bit move to index ${sellDay + 1}`
+                            : buyDay < round.prices.length - 2
+                              ? `Help Bit move i to ${buyDay + 1}`
+                              : "Finish the scan"}
+                        </button>
                       </div>
                     )}
                   </>

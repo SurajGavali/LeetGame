@@ -44,7 +44,11 @@ test("server-renders the LeetGame landing page", async () => {
   assert.match(html, /INNER LOOP/);
   assert.match(html, /prices\[i\]/);
   assert.match(html, /PROFIT FLOOR/);
-  assert.match(html, /NEGATIVE RESULT · AUTO SKIP/);
+  assert.match(html, /What should I do\?/);
+  assert.match(html, /Tell Bit: skip it/);
+  assert.match(html, /Tell Bit: update/);
+  assert.match(html, /aria-pressed="true"/);
+  assert.doesNotMatch(html, /AUTO SKIP/);
   assert.match(html, /Reverse Integer/);
   assert.match(html, /\/leetgame-symbol\.svg/);
   assert.match(html, /https:\/\/leetgame\.example\/og\.png/);
