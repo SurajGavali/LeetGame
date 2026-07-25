@@ -44,9 +44,9 @@ export async function generateMetadata(): Promise<Metadata> {
       images: ["/og.png"],
     },
     icons: {
-      icon: "/leetgame-symbol.svg",
-      shortcut: "/leetgame-symbol.svg",
-      apple: "/leetgame-symbol.svg",
+      icon: "/leetgame-symbol.svg?v=2",
+      shortcut: "/leetgame-symbol.svg?v=2",
+      apple: "/leetgame-symbol.svg?v=2",
     },
   };
 }
