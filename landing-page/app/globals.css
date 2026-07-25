@@ -1087,6 +1087,395 @@ button {
   align-self: flex-start;
 }
 
+.play-slide.candy-play-slide {
+  display: block;
+  min-height: 780px;
+  padding: 34px;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(109, 40, 217, 0.11), transparent 34%),
+    #0e0e0e;
+}
+
+.candy-game-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  gap: 8px 42px;
+  align-items: end;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--hairline-soft);
+}
+
+.candy-game-header > div:first-child {
+  grid-row: 1 / span 4;
+}
+
+.candy-game-header .game-kicker {
+  margin-bottom: 16px;
+}
+
+.candy-game-header h2 {
+  margin: 0;
+  font-size: clamp(38px, 4vw, 54px);
+  font-weight: 550;
+  line-height: 0.98;
+  letter-spacing: -0.05em;
+}
+
+.candy-game-header > div:first-child > p {
+  max-width: 560px;
+  margin: 16px 0 0;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.candy-game-header .run-stats {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.candy-game-header .run-progress {
+  margin-top: 8px;
+}
+
+.candy-game-header .concept-back-link {
+  margin-top: 6px;
+}
+
+.candy-game-board {
+  display: grid;
+  grid-template-columns:
+    minmax(190px, 0.85fr)
+    minmax(270px, 1.1fr)
+    minmax(220px, 0.95fr);
+  gap: 20px;
+  align-items: center;
+  padding-top: 24px;
+}
+
+.thought-bubble {
+  position: relative;
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--hairline);
+  border-radius: 20px;
+  background: var(--surface-1);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.24);
+}
+
+.thought-bubble::after {
+  position: absolute;
+  top: 46%;
+  width: 18px;
+  height: 18px;
+  border-top: 1px solid var(--hairline);
+  border-right: 1px solid var(--hairline);
+  background: var(--surface-1);
+  content: "";
+}
+
+.thought-bubble--buy::after {
+  right: -10px;
+  transform: rotate(45deg);
+}
+
+.thought-bubble--sell::after {
+  left: -10px;
+  transform: rotate(-135deg);
+}
+
+.thought-bubble h3 {
+  margin: 13px 0 14px;
+  font-size: 20px;
+  font-weight: 540;
+  line-height: 1.15;
+  letter-spacing: -0.55px;
+}
+
+.thought-bubble > p,
+.map-complete > p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.thought-memory {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  margin-top: 20px;
+}
+
+.thought-memory div {
+  display: flex;
+  min-width: 0;
+  padding: 11px;
+  gap: 6px;
+  flex-direction: column;
+  border-radius: 9px;
+  background: #0c0c0c;
+}
+
+.thought-memory span {
+  color: #5f5f5f;
+  font-family: var(--mono);
+  font-size: 7px;
+  letter-spacing: 0.55px;
+}
+
+.thought-memory strong {
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 520;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candy-map {
+  position: relative;
+  min-width: 0;
+  height: 500px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at 20% 18%, rgba(209, 58, 155, 0.12), transparent 26%),
+    radial-gradient(circle at 82% 72%, rgba(235, 105, 45, 0.11), transparent 28%),
+    #0a0a0a;
+}
+
+.map-link {
+  position: absolute;
+  z-index: 0;
+  height: 4px;
+  border-radius: 100px;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.15) 0,
+    rgba(255, 255, 255, 0.15) 6px,
+    transparent 6px,
+    transparent 11px
+  );
+  transform-origin: left center;
+}
+
+.map-link--1 {
+  top: 8%;
+  left: 52%;
+  width: 31%;
+  transform: rotate(128deg);
+}
+
+.map-link--2 {
+  top: 23%;
+  left: 28%;
+  width: 44%;
+  transform: rotate(28deg);
+}
+
+.map-link--3 {
+  top: 39%;
+  left: 68%;
+  width: 42%;
+  transform: rotate(139deg);
+}
+
+.map-link--4 {
+  top: 55%;
+  left: 33%;
+  width: 43%;
+  transform: rotate(26deg);
+}
+
+.map-link--5 {
+  top: 71%;
+  left: 70%;
+  width: 34%;
+  transform: rotate(133deg);
+}
+
+.map-node {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  width: 72px;
+  height: 72px;
+  gap: 2px;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  background: linear-gradient(145deg, #67277e, #32143f);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.15),
+    0 10px 24px rgba(0, 0, 0, 0.3);
+  transform: translate(-50%, -50%);
+  transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+}
+
+.map-node:nth-of-type(2n) {
+  background: linear-gradient(145deg, #a54268, #542038);
+}
+
+.map-node:nth-of-type(3n) {
+  background: linear-gradient(145deg, #b75a31, #5a291c);
+}
+
+.map-node small {
+  color: rgba(255, 255, 255, 0.56);
+  font-family: var(--mono);
+  font-size: 7px;
+  letter-spacing: 0.45px;
+}
+
+.map-node strong {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 560;
+}
+
+.map-node em {
+  min-height: 8px;
+  color: rgba(255, 255, 255, 0.6);
+  font-family: var(--mono);
+  font-size: 6px;
+  font-style: normal;
+  letter-spacing: 0.4px;
+}
+
+.map-node.is-buy {
+  border-color: var(--accent-blue);
+  box-shadow:
+    0 0 0 5px rgba(0, 153, 255, 0.11),
+    0 0 30px rgba(0, 153, 255, 0.22);
+}
+
+.map-node.is-checking {
+  border-color: var(--ink);
+  box-shadow:
+    0 0 0 5px rgba(255, 255, 255, 0.1),
+    0 0 28px rgba(255, 255, 255, 0.14);
+  transform: translate(-50%, -50%) scale(1.07);
+}
+
+.map-node.is-record:not(.is-buy):not(.is-checking) {
+  border-color: var(--success);
+  box-shadow: 0 0 25px rgba(97, 208, 135, 0.18);
+}
+
+.bit-mascot.map-bit {
+  z-index: 3;
+  transform: translate(-50%, -116%);
+  transition:
+    left 560ms cubic-bezier(0.16, 1, 0.3, 1),
+    top 560ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.thought-bubble--sell code {
+  display: block;
+  padding: 12px;
+  border-radius: 8px;
+  background: #0b0b0b;
+  color: var(--ink-muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.thought-bubble--sell code strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 550;
+}
+
+.thought-bubble--sell > p {
+  margin-top: 16px;
+}
+
+.thought-bubble--sell .state-actions {
+  grid-template-columns: 1fr;
+  margin-top: 14px;
+}
+
+.resolved-check {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.resolved-check > span {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.resolved-check > span.is-skip {
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--ink-muted);
+}
+
+.resolved-check > span.is-update {
+  background: rgba(97, 208, 135, 0.11);
+  color: var(--success);
+}
+
+.resolved-check .button {
+  width: 100%;
+}
+
+.map-complete h3 {
+  margin-bottom: 12px;
+}
+
+.map-complete .completion-metrics {
+  margin-top: 18px;
+}
+
+.map-complete > .button {
+  width: 100%;
+}
+
+.map-narrator {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: center;
+  margin-top: 18px;
+  padding: 14px 18px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.map-narrator span {
+  color: var(--accent-blue);
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.65px;
+}
+
+.map-narrator p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.complexity-note {
+  margin: 12px 0 0;
+  color: #686868;
+  font-size: 11px;
+  text-align: center;
+}
+
+.complexity-note strong {
+  color: var(--ink-muted);
+  font-weight: 520;
+}
+
 .game-preview {
   display: grid;
   grid-template-columns: 0.85fr 1.15fr;
@@ -2037,6 +2426,45 @@ button {
     min-height: 460px;
   }
 
+  .play-slide.candy-play-slide {
+    padding: 28px;
+  }
+
+  .candy-game-header {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .candy-game-header > div:first-child {
+    grid-row: auto;
+  }
+
+  .candy-game-header .run-stats {
+    margin-top: 10px;
+  }
+
+  .candy-game-board {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .candy-map {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    height: 460px;
+  }
+
+  .thought-bubble--buy {
+    grid-column: 1;
+  }
+
+  .thought-bubble--sell {
+    grid-column: 2;
+  }
+
+  .thought-bubble::after {
+    display: none;
+  }
+
   .manifesto {
     padding-block: 110px 90px;
   }
@@ -2261,6 +2689,43 @@ button {
     padding: 20px;
   }
 
+  .play-slide.candy-play-slide {
+    padding: 20px;
+  }
+
+  .candy-game-board {
+    grid-template-columns: 1fr;
+  }
+
+  .thought-bubble--buy,
+  .thought-bubble--sell,
+  .candy-map {
+    grid-column: 1;
+  }
+
+  .thought-bubble--buy {
+    grid-row: 1;
+  }
+
+  .candy-map {
+    grid-row: 2;
+    height: 430px;
+  }
+
+  .thought-bubble--sell {
+    grid-row: 3;
+  }
+
+  .map-node {
+    width: 64px;
+    height: 64px;
+  }
+
+  .map-narrator {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
   .chart-grid {
     gap: 8px;
     height: 220px;
@@ -2369,7 +2834,8 @@ button {
   }
 
   .bit-mascot,
-  .run-progress span {
+  .run-progress span,
+  .map-node {
     transition: none;
   }
 }

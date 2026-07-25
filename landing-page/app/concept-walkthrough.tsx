@@ -8,60 +8,71 @@ const challengeRounds = [
   { prices: [5, 2, 4, 1, 8, 3], answer: 7 },
   { prices: [9, 6, 4, 5, 3, 7], answer: 4 },
 ];
+const mapPoints = [
+  { x: 52, y: 7 },
+  { x: 28, y: 23 },
+  { x: 68, y: 39 },
+  { x: 33, y: 55 },
+  { x: 70, y: 71 },
+  { x: 44, y: 87 },
+];
 
-type MachinePhase = "minimum" | "profit" | "complete";
+type Verdict = "skip" | "update";
 
 export function ConceptWalkthrough() {
   const [step, setStep] = useState(0);
   const [roundIndex, setRoundIndex] = useState(0);
-  const [day, setDay] = useState(0);
-  const [phase, setPhase] = useState<MachinePhase>("minimum");
-  const [minimum, setMinimum] = useState(Number.POSITIVE_INFINITY);
-  const [minimumDay, setMinimumDay] = useState<number | null>(null);
+  const [buyDay, setBuyDay] = useState(0);
+  const [sellDay, setSellDay] = useState(1);
   const [bestProfit, setBestProfit] = useState(0);
   const [bestBuyDay, setBestBuyDay] = useState<number | null>(null);
   const [bestSellDay, setBestSellDay] = useState<number | null>(null);
+  const [resolved, setResolved] = useState(false);
+  const [resolvedVerdict, setResolvedVerdict] = useState<Verdict | null>(null);
+  const [complete, setComplete] = useState(false);
+  const [comparisons, setComparisons] = useState(0);
   const [score, setScore] = useState(0);
   const [streak, setStreak] = useState(0);
   const [mistakes, setMistakes] = useState(0);
   const [message, setMessage] = useState(
-    "Inspect today’s price. First, decide what belongs in minimum memory.",
+    "Bit bought on day 1. Check every later sell day, one at a time.",
   );
 
   const round = challengeRounds[roundIndex];
-  const currentPrice = round.prices[day];
-  const currentDifference = Number.isFinite(minimum)
-    ? currentPrice - minimum
-    : 0;
-  const completedChecks =
-    day * 2 + (phase === "profit" ? 1 : phase === "complete" ? 2 : 0);
-  const totalChecks = round.prices.length * 2;
-  const attempts = completedChecks + mistakes;
+  const buyPrice = round.prices[buyDay];
+  const sellPrice = round.prices[sellDay];
+  const candidateProfit = sellPrice - buyPrice;
+  const shouldUpdate = candidateProfit > bestProfit;
+  const totalComparisons =
+    (round.prices.length * (round.prices.length - 1)) / 2;
+  const attempts = comparisons + mistakes;
   const accuracy =
-    attempts === 0 ? 100 : Math.round((completedChecks / attempts) * 100);
+    attempts === 0 ? 100 : Math.round((comparisons / attempts) * 100);
 
   function goTo(nextStep: number) {
     setStep(nextStep);
   }
 
-  function resetMachine(nextRound = false) {
+  function resetGame(nextRound = false) {
     if (nextRound) {
       setRoundIndex((currentRound) => {
         return (currentRound + 1) % challengeRounds.length;
       });
     }
-    setDay(0);
-    setPhase("minimum");
-    setMinimum(Number.POSITIVE_INFINITY);
-    setMinimumDay(null);
+    setBuyDay(0);
+    setSellDay(1);
     setBestProfit(0);
     setBestBuyDay(null);
     setBestSellDay(null);
+    setResolved(false);
+    setResolvedVerdict(null);
+    setComplete(false);
+    setComparisons(0);
     setScore(0);
     setStreak(0);
     setMistakes(0);
     setMessage(
-      "New hidden stream loaded. Decide what belongs in minimum memory.",
+      "New map loaded. Bit bought on day 1 and will test every later sell day.",
     );
   }
 
@@ -77,69 +88,70 @@ export function ConceptWalkthrough() {
     setMessage(nextMessage);
   }
 
-  function chooseMinimum(replace: boolean) {
-    if (phase !== "minimum") return;
+  function chooseVerdict(verdict: Verdict) {
+    if (resolved || complete) return;
 
-    const shouldReplace = currentPrice < minimum;
-    if (replace !== shouldReplace) {
+    const expectedVerdict: Verdict = shouldUpdate ? "update" : "skip";
+    if (verdict !== expectedVerdict) {
       miss(
-        shouldReplace
-          ? `$${currentPrice} is lower than ${
-              Number.isFinite(minimum) ? `$${minimum}` : "∞"
-            }. The machine must replace its minimum.`
-          : `$${minimum} is still lower than $${currentPrice}. Keep the existing minimum.`,
+        shouldUpdate
+          ? `$${candidateProfit} is greater than the current record of $${bestProfit}. Bit should update the maximum.`
+          : `$${candidateProfit} is not greater than the current record of $${bestProfit}. Bit should skip it.`,
       );
       return;
     }
 
     reward();
-    if (shouldReplace) {
-      setMinimum(currentPrice);
-      setMinimumDay(day);
+    setComparisons((currentComparisons) => currentComparisons + 1);
+    setResolved(true);
+    setResolvedVerdict(verdict);
+
+    if (shouldUpdate) {
+      setBestProfit(candidateProfit);
+      setBestBuyDay(buyDay);
+      setBestSellDay(sellDay);
       setMessage(
-        `Minimum updated to $${currentPrice}. Now calculate today’s difference and compare it with best profit.`,
+        `$${candidateProfit} beats the previous record of $${bestProfit}. Bit replaced max profit and saved this pair.`,
+      );
+    } else if (candidateProfit <= 0) {
+      setMessage(
+        `Selling today gives $${candidateProfit}. That is not profitable, so Bit skips this day.`,
       );
     } else {
       setMessage(
-        `Minimum stays $${minimum}. Now calculate $${currentPrice} − $${minimum} and compare it with best profit.`,
+        `$${candidateProfit} is positive, but it does not beat the record of $${bestProfit}. Bit keeps the old maximum.`,
       );
     }
-    setPhase("profit");
   }
 
-  function chooseProfit(replace: boolean) {
-    if (phase !== "profit") return;
+  function advanceBit() {
+    if (!resolved || complete) return;
 
-    const shouldReplace = currentDifference > bestProfit;
-    if (replace !== shouldReplace) {
-      miss(
-        shouldReplace
-          ? `$${currentDifference} beats the stored best of $${bestProfit}. Replace best profit.`
-          : `$${currentDifference} does not beat $${bestProfit}. Keep the existing best.`,
-      );
-      return;
-    }
-
-    reward();
-    const nextBest = shouldReplace ? currentDifference : bestProfit;
-    if (shouldReplace) {
-      setBestProfit(currentDifference);
-      setBestBuyDay(minimumDay);
-      setBestSellDay(day);
-    }
-
-    if (day === round.prices.length - 1) {
-      setPhase("complete");
+    if (sellDay < round.prices.length - 1) {
+      setSellDay((currentSellDay) => currentSellDay + 1);
+      setResolved(false);
+      setResolvedVerdict(null);
       setMessage(
-        `Scan complete. Bit visited every price once and returned the optimal profit: $${nextBest}.`,
+        `Bit moved to day ${sellDay + 2}. It still remembers buying on day ${buyDay + 1} for $${buyPrice}.`,
       );
       return;
     }
 
-    setDay((currentDay) => currentDay + 1);
-    setPhase("minimum");
+    if (buyDay < round.prices.length - 2) {
+      const nextBuyDay = buyDay + 1;
+      setBuyDay(nextBuyDay);
+      setSellDay(nextBuyDay + 1);
+      setResolved(false);
+      setResolvedVerdict(null);
+      setMessage(
+        `Every sell day after day ${buyDay + 1} was checked. Bit now buys on day ${nextBuyDay + 1} and starts the inner loop again.`,
+      );
+      return;
+    }
+
+    setComplete(true);
     setMessage(
-      `State locked. Bit advanced to day ${day + 2}; the next price is now visible.`,
+      `All ${totalComparisons} legal buy–sell pairs were checked. Bit’s maximum is $${bestProfit}.`,
     );
   }
 
@@ -247,8 +259,9 @@ export function ConceptWalkthrough() {
               <h2>Your eyes cheat. The machine cannot.</h2>
               <p>
                 A human sees the entire chart and spots the low point and later
-                high point instantly. A computer receives one value at a time.
-                It must create the answer through memory and comparison.
+                high point instantly. Bit begins with a simpler machine plan:
+                pin one buy day, test every later sell day, remember the best,
+                then repeat from the next buy day.
               </p>
             </div>
 
@@ -280,23 +293,23 @@ export function ConceptWalkthrough() {
               <article className="thinking-card thinking-card--machine">
                 <div className="thinking-card-heading">
                   <span>MACHINE VIEW</span>
-                  <strong>Builds the pattern</strong>
+                  <strong>Checks every legal pair</strong>
                 </div>
                 <div className="machine-state">
                   <div>
-                    <span>currentPrice</span>
-                    <strong>7</strong>
+                    <span>buyDay</span>
+                    <strong>D1</strong>
                   </div>
                   <div>
-                    <span>minPrice</span>
-                    <strong>∞</strong>
+                    <span>sellDay</span>
+                    <strong>D2</strong>
                   </div>
                   <div>
-                    <span>bestProfit</span>
+                    <span>maxProfit</span>
                     <strong>0</strong>
                   </div>
                 </div>
-                <p>Read → compare → remember → advance. Then repeat.</p>
+                <p>Subtract → compare → remember → move. Two nested loops.</p>
               </article>
             </div>
 
@@ -315,23 +328,24 @@ export function ConceptWalkthrough() {
                 onClick={() => goTo(2)}
                 tabIndex={step === 1 ? 0 : -1}
               >
-                Think like the machine <span aria-hidden="true">→</span>
+                Walk every pair with Bit <span aria-hidden="true">→</span>
               </button>
             </div>
           </section>
 
           <section
-            className="concept-slide play-slide"
+            className="concept-slide play-slide candy-play-slide"
             aria-hidden={step !== 2}
           >
-            <div className="game-copy machine-game-copy">
-              <span className="game-kicker">Algorithm mode · future sealed</span>
-              <h2>Become the loop.</h2>
-              <p>
-                No trading guesses. Make the exact two state decisions the
-                one-pass solution makes. Bit moves only when your machine state
-                is correct.
-              </p>
+            <div className="candy-game-header">
+              <div>
+                <span className="game-kicker">Pair quest · nested loops</span>
+                <h2>Walk the stock map.</h2>
+                <p>
+                  Hold one buy day. Visit every later sell day. Keep only a
+                  profit that beats Bit&apos;s current record.
+                </p>
+              </div>
               <div className="run-stats" aria-label="Current run statistics">
                 <div>
                   <span>SCORE</span>
@@ -342,17 +356,22 @@ export function ConceptWalkthrough() {
                   <strong>{streak}×</strong>
                 </div>
                 <div>
-                  <span>ACCURACY</span>
-                  <strong>{accuracy}%</strong>
+                  <span>MAX</span>
+                  <strong>${bestProfit}</strong>
                 </div>
               </div>
-              <div className="run-progress" aria-label={`${completedChecks} of ${totalChecks} state checks complete`}>
+              <div
+                className="run-progress"
+                aria-label={`${comparisons} of ${totalComparisons} pairs checked`}
+              >
                 <span
-                  style={{ width: `${(completedChecks / totalChecks) * 100}%` }}
+                  style={{
+                    width: `${(comparisons / totalComparisons) * 100}%`,
+                  }}
                 />
               </div>
               <p className="run-progress-label">
-                {completedChecks} / {totalChecks} state checks
+                {comparisons} / {totalComparisons} legal pairs checked
               </p>
               <button
                 type="button"
@@ -364,13 +383,87 @@ export function ConceptWalkthrough() {
               </button>
             </div>
 
-            <div className="game-board machine-board" aria-label="Playable one-pass algorithm challenge">
-              <div className="runner-lane" aria-label={`Bit is processing day ${day + 1}`}>
+            <div className="candy-game-board">
+              <aside className="thought-bubble thought-bubble--buy">
+                <span className="decision-kicker">
+                  BIT&apos;S BUY MEMORY · OUTER LOOP
+                </span>
+                <h3>
+                  “I bought on day {buyDay + 1} for ${buyPrice}.”
+                </h3>
+                <p>
+                  I will keep this buy fixed while I try every sell day to its
+                  right.
+                </p>
+                <div className="thought-memory">
+                  <div>
+                    <span>BUY</span>
+                    <strong>D{buyDay + 1} · ${buyPrice}</strong>
+                  </div>
+                  <div>
+                    <span>MAX SO FAR</span>
+                    <strong>${bestProfit}</strong>
+                  </div>
+                </div>
+              </aside>
+
+              <div
+                className="candy-map"
+                aria-label="Winding stock-price map"
+              >
+                {mapPoints.slice(0, -1).map((_, index) => (
+                  <span
+                    className={`map-link map-link--${index + 1}`}
+                    aria-hidden="true"
+                    key={`link-${index}`}
+                  />
+                ))}
+
+                {round.prices.map((price, index) => {
+                  const point = mapPoints[index];
+                  const nodeLabel =
+                    index === buyDay
+                      ? "BUY"
+                      : index === sellDay && !complete
+                        ? "CHECK"
+                        : index === bestBuyDay
+                          ? "BEST BUY"
+                          : index === bestSellDay
+                            ? "BEST SELL"
+                            : "";
+
+                  return (
+                    <div
+                      className={[
+                        "map-node",
+                        index === buyDay ? "is-buy" : "",
+                        index === sellDay && !complete ? "is-checking" : "",
+                        index === bestBuyDay || index === bestSellDay
+                          ? "is-record"
+                          : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      style={{ left: `${point.x}%`, top: `${point.y}%` }}
+                      aria-label={`Day ${index + 1}, stock price $${price}${
+                        nodeLabel ? `, ${nodeLabel}` : ""
+                      }`}
+                      key={`map-day-${index}`}
+                    >
+                      <small>D{index + 1}</small>
+                      <strong>${price}</strong>
+                      <em>{nodeLabel}</em>
+                    </div>
+                  );
+                })}
+
                 <div
-                  className="bit-mascot"
+                  className="bit-mascot map-bit"
                   style={{
-                    left: `${((day + 0.5) / round.prices.length) * 100}%`,
+                    left: `${mapPoints[sellDay].x}%`,
+                    top: `${mapPoints[sellDay].y}%`,
                   }}
+                  aria-label={`Bit is checking sell day ${sellDay + 1}`}
                 >
                   <span className="bit-antenna" aria-hidden="true" />
                   <span className="bit-face" aria-hidden="true">
@@ -379,163 +472,125 @@ export function ConceptWalkthrough() {
                   </span>
                   <small>BIT</small>
                 </div>
-                <div className="day-track">
-                  {round.prices.map((_, index) => (
-                    <div
-                      className={[
-                        "day-node",
-                        index < day ? "is-visited" : "",
-                        index === day ? "is-current" : "",
-                        index > day ? "is-locked" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      key={`day-${index}`}
+              </div>
+
+              <aside className="thought-bubble thought-bubble--sell">
+                {complete ? (
+                  <div className="map-complete">
+                    <span className="decision-kicker">
+                      MAP COMPLETE · O(n²)
+                    </span>
+                    <h3>Bit checked every legal pair.</h3>
+                    <p>
+                      The maximum came from buying on day{" "}
+                      {bestBuyDay === null ? "—" : bestBuyDay + 1} and selling
+                      on day {bestSellDay === null ? "—" : bestSellDay + 1}.
+                    </p>
+                    <div className="completion-metrics">
+                      <div>
+                        <span>RETURN</span>
+                        <strong>${bestProfit}</strong>
+                      </div>
+                      <div>
+                        <span>PAIRS</span>
+                        <strong>{comparisons}</strong>
+                      </div>
+                      <div>
+                        <span>ACCURACY</span>
+                        <strong>{accuracy}%</strong>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="button button-primary"
+                      onClick={() => resetGame(true)}
+                      tabIndex={step === 2 ? 0 : -1}
                     >
-                      <small>DAY {index + 1}</small>
-                      {index < day ? (
-                        <span aria-label="Processed">✓</span>
-                      ) : index === day ? (
-                        <strong>${currentPrice}</strong>
-                      ) : (
-                        <span aria-label="Future price hidden">?</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="memory-rack" aria-label="Machine memory">
-                <div className={phase === "minimum" ? "is-active" : ""}>
-                  <span>MINIMUM</span>
-                  <strong>{Number.isFinite(minimum) ? `$${minimum}` : "∞"}</strong>
-                </div>
-                <div className={phase === "profit" ? "is-active" : ""}>
-                  <span>DIFFERENCE</span>
-                  <strong>
-                    {phase === "profit" || phase === "complete"
-                      ? `$${currentDifference}`
-                      : "—"}
-                  </strong>
-                </div>
-                <div>
-                  <span>BEST PROFIT</span>
-                  <strong>${bestProfit}</strong>
-                </div>
-              </div>
-
-              {phase === "complete" ? (
-                <div className="machine-complete">
-                  <span className="decision-kicker">RUN COMPLETE · O(n)</span>
-                  <h3>Bit found the optimum.</h3>
-                  <p>
-                    Buy day {bestBuyDay === null ? "—" : bestBuyDay + 1} at{" "}
-                    <strong>
-                      {bestBuyDay === null
-                        ? "—"
-                        : `$${round.prices[bestBuyDay]}`}
-                    </strong>
-                    , sell day{" "}
-                    {bestSellDay === null ? "—" : bestSellDay + 1} at{" "}
-                    <strong>
-                      {bestSellDay === null
-                        ? "—"
-                        : `$${round.prices[bestSellDay]}`}
-                    </strong>
-                    .
-                  </p>
-                  <div className="completion-metrics">
-                    <div>
-                      <span>RETURN</span>
-                      <strong>${bestProfit}</strong>
-                    </div>
-                    <div>
-                      <span>EXPECTED</span>
-                      <strong>${round.answer}</strong>
-                    </div>
-                    <div>
-                      <span>ACCURACY</span>
-                      <strong>{accuracy}%</strong>
-                    </div>
+                      Load a new map
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    className="button button-primary button-large"
-                    onClick={() => resetMachine(true)}
-                    tabIndex={step === 2 ? 0 : -1}
-                  >
-                    Load a new hidden stream
-                  </button>
-                </div>
-              ) : (
-                <div className="decision-console">
-                  {phase === "minimum" ? (
-                    <>
-                      <span className="decision-kicker">
-                        CHECK 1 OF 2 · MINIMUM MEMORY
-                      </span>
-                      <h3>Is today&apos;s ${currentPrice} a new minimum?</h3>
-                      <code>
-                        ${currentPrice} &lt;{" "}
-                        {Number.isFinite(minimum) ? `$${minimum}` : "∞"} ?
-                      </code>
-                      <div className="state-actions">
-                        <button
-                          type="button"
-                          onClick={() => chooseMinimum(false)}
-                          tabIndex={step === 2 ? 0 : -1}
-                        >
-                          <span>KEEP</span>
-                          {Number.isFinite(minimum)
-                            ? `Minimum $${minimum}`
-                            : "Minimum ∞"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => chooseMinimum(true)}
-                          tabIndex={step === 2 ? 0 : -1}
-                        >
-                          <span>REPLACE</span>
-                          Minimum ${currentPrice}
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <span className="decision-kicker">
-                        CHECK 2 OF 2 · BEST PROFIT MEMORY
-                      </span>
-                      <h3>Does today&apos;s difference beat the best?</h3>
-                      <code>
-                        ${currentPrice} − ${minimum} = ${currentDifference}
-                      </code>
-                      <div className="state-actions">
-                        <button
-                          type="button"
-                          onClick={() => chooseProfit(false)}
-                          tabIndex={step === 2 ? 0 : -1}
-                        >
-                          <span>KEEP</span>
-                          Best ${bestProfit}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => chooseProfit(true)}
-                          tabIndex={step === 2 ? 0 : -1}
-                        >
-                          <span>REPLACE</span>
-                          Best ${currentDifference}
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
+                ) : (
+                  <>
+                    <span className="decision-kicker">
+                      TODAY&apos;S CHECK · INNER LOOP
+                    </span>
+                    <h3>
+                      “If I sell on day {sellDay + 1} for ${sellPrice}…”
+                    </h3>
+                    <code>
+                      sell ${sellPrice} − buy ${buyPrice} ={" "}
+                      <strong>${candidateProfit}</strong>
+                    </code>
 
-              <p className="game-message" role="status" aria-live="polite">
-                {message}
-              </p>
+                    {!resolved ? (
+                      <>
+                        <p>
+                          Is ${candidateProfit} greater than my saved maximum of
+                          {" "}${bestProfit}?
+                        </p>
+                        <div className="state-actions">
+                          <button
+                            type="button"
+                            onClick={() => chooseVerdict("skip")}
+                            tabIndex={step === 2 ? 0 : -1}
+                          >
+                            <span>NOT GREATER</span>
+                            Skip this pair
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => chooseVerdict("update")}
+                            tabIndex={step === 2 ? 0 : -1}
+                          >
+                            <span>NEW RECORD</span>
+                            Update max
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="resolved-check">
+                        <span
+                          className={
+                            resolvedVerdict === "update"
+                              ? "is-update"
+                              : "is-skip"
+                          }
+                        >
+                          {resolvedVerdict === "update"
+                            ? `New maximum: $${candidateProfit}`
+                            : "Pair skipped"}
+                        </span>
+                        <button
+                          type="button"
+                          className="button button-primary"
+                          onClick={advanceBit}
+                          tabIndex={step === 2 ? 0 : -1}
+                        >
+                          {sellDay < round.prices.length - 1
+                            ? `Move Bit to day ${sellDay + 2}`
+                            : buyDay < round.prices.length - 2
+                              ? `Now buy on day ${buyDay + 2}`
+                              : "Finish the scan"}
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </aside>
             </div>
+
+            <div className="map-narrator" role="status" aria-live="polite">
+              <span>BIT THINKS</span>
+              <p>{message}</p>
+            </div>
+
+            {complete ? (
+              <p className="complexity-note">
+                This first strategy is easy to understand but checks{" "}
+                <strong>{totalComparisons} pairs</strong>. The next lesson can
+                compress the same answer into one pass.
+              </p>
+            ) : null}
           </section>
         </div>
       </div>
