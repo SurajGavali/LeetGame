@@ -1145,9 +1145,9 @@ button {
 .candy-game-board {
   display: grid;
   grid-template-columns:
-    minmax(190px, 0.85fr)
-    minmax(270px, 1.1fr)
-    minmax(220px, 0.95fr);
+    minmax(200px, 0.72fr)
+    minmax(420px, 1.5fr)
+    minmax(230px, 0.82fr);
   gap: 20px;
   align-items: center;
   padding-top: 24px;
@@ -1231,6 +1231,10 @@ button {
   font-weight: 520;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.thought-memory div:last-child {
+  grid-column: 1 / -1;
 }
 
 .candy-map {
@@ -1371,6 +1375,206 @@ button {
   transition:
     left 560ms cubic-bezier(0.16, 1, 0.3, 1),
     top 560ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.array-stage {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 72% 12%, rgba(109, 40, 217, 0.12), transparent 32%),
+    #0a0a0a;
+}
+
+.array-caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.array-caption code,
+.array-rule code {
+  color: var(--ink);
+  font-family: var(--mono);
+}
+
+.array-caption code {
+  font-size: 13px;
+}
+
+.array-caption span {
+  color: #5f5f5f;
+  font-family: var(--mono);
+  font-size: 7px;
+  letter-spacing: 0.55px;
+}
+
+.array-scroll {
+  overflow-x: auto;
+  padding: 0 2px 4px;
+  scrollbar-color: #323232 transparent;
+  scrollbar-width: thin;
+}
+
+.array-track {
+  position: relative;
+  display: grid;
+  min-width: 410px;
+  gap: 5px;
+  padding: 112px 0 78px;
+}
+
+.array-track::before {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--hairline-soft);
+  content: "";
+}
+
+.array-cell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  aspect-ratio: 1;
+  min-width: 0;
+  gap: 6px;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  background: #141414;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
+  transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+}
+
+.array-cell small {
+  color: #656565;
+  font-family: var(--mono);
+  font-size: 6px;
+  letter-spacing: 0.45px;
+}
+
+.array-cell strong {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 560;
+}
+
+.array-cell.is-buy {
+  border-color: rgba(0, 153, 255, 0.7);
+  box-shadow: 0 0 0 4px rgba(0, 153, 255, 0.09);
+}
+
+.array-cell.is-checking {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08);
+  transform: translateY(-4px);
+}
+
+.array-cell.is-record:not(.is-buy):not(.is-checking) {
+  border-color: rgba(97, 208, 135, 0.72);
+}
+
+.bit-mascot.array-bit {
+  top: 18px;
+  z-index: 3;
+  transition: left 560ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.array-pointer {
+  position: absolute;
+  z-index: 2;
+  color: var(--ink-muted);
+  font-family: var(--mono);
+  font-size: 7px;
+  letter-spacing: 0.35px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  transition: left 560ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.array-pointer i {
+  display: block;
+  width: 1px;
+  height: 14px;
+  margin-inline: auto;
+  background: currentColor;
+}
+
+.array-pointer--sell {
+  top: 83px;
+  color: var(--ink);
+}
+
+.array-pointer--sell i {
+  margin-top: 5px;
+}
+
+.array-pointer--buy {
+  bottom: 30px;
+  color: var(--accent-blue);
+}
+
+.array-pointer--buy i {
+  margin-bottom: 5px;
+}
+
+.array-rule {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline-soft);
+  color: #686868;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.auto-skip-card {
+  position: relative;
+  overflow: hidden;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 9px;
+  background: #0b0b0b;
+}
+
+.auto-skip-card span {
+  color: #858585;
+  font-family: var(--mono);
+  font-size: 7px;
+  letter-spacing: 0.55px;
+}
+
+.auto-skip-card p {
+  margin: 8px 0 4px;
+  color: var(--ink-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.auto-skip-card i {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #777, var(--ink));
+  transform-origin: left;
+  animation: auto-skip-progress 2.9s linear both;
+}
+
+.auto-move {
+  color: #777;
+  font-family: var(--mono);
+  font-size: 9px;
+  line-height: 1.4;
 }
 
 .thought-bubble--sell code {
@@ -2281,6 +2485,16 @@ button {
   font-size: 10px;
 }
 
+@keyframes auto-skip-progress {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
 @media (max-width: 980px) {
   .thinking-slide {
     grid-template-columns: 1fr;
@@ -2313,6 +2527,27 @@ button {
   .skill-tree {
     width: min(100%, 520px);
     justify-self: center;
+  }
+
+  .candy-game-board {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .array-stage {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .thought-bubble--buy {
+    grid-column: 1;
+  }
+
+  .thought-bubble--sell {
+    grid-column: 2;
+  }
+
+  .thought-bubble::after {
+    display: none;
   }
 }
 
@@ -2447,10 +2682,9 @@ button {
     grid-template-columns: 1fr 1fr;
   }
 
-  .candy-map {
+  .array-stage {
     grid-column: 1 / -1;
     grid-row: 1;
-    height: 460px;
   }
 
   .thought-bubble--buy {
@@ -2699,7 +2933,7 @@ button {
 
   .thought-bubble--buy,
   .thought-bubble--sell,
-  .candy-map {
+  .array-stage {
     grid-column: 1;
   }
 
@@ -2707,18 +2941,12 @@ button {
     grid-row: 1;
   }
 
-  .candy-map {
+  .array-stage {
     grid-row: 2;
-    height: 430px;
   }
 
   .thought-bubble--sell {
     grid-row: 3;
-  }
-
-  .map-node {
-    width: 64px;
-    height: 64px;
   }
 
   .map-narrator {
@@ -2835,8 +3063,13 @@ button {
 
   .bit-mascot,
   .run-progress span,
-  .map-node {
+  .array-cell,
+  .array-pointer {
     transition: none;
+  }
+
+  .auto-skip-card i {
+    animation: none;
   }
 }
 

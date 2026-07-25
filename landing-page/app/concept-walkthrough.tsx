@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const examplePrices = [7, 1, 5, 3, 6, 4];
 const challengeRounds = [
@@ -8,15 +8,6 @@ const challengeRounds = [
   { prices: [5, 2, 4, 1, 8, 3], answer: 7 },
   { prices: [9, 6, 4, 5, 3, 7], answer: 4 },
 ];
-const mapPoints = [
-  { x: 52, y: 7 },
-  { x: 28, y: 23 },
-  { x: 68, y: 39 },
-  { x: 33, y: 55 },
-  { x: 70, y: 71 },
-  { x: 44, y: 87 },
-];
-
 type Verdict = "skip" | "update";
 
 export function ConceptWalkthrough() {
@@ -35,7 +26,7 @@ export function ConceptWalkthrough() {
   const [streak, setStreak] = useState(0);
   const [mistakes, setMistakes] = useState(0);
   const [message, setMessage] = useState(
-    "Bit bought on day 1. Check every later sell day, one at a time.",
+    "i is pinned at index 0. Bit starts as j at index 1 and moves one array cell at a time.",
   );
 
   const round = challengeRounds[roundIndex];
@@ -48,6 +39,92 @@ export function ConceptWalkthrough() {
   const attempts = comparisons + mistakes;
   const accuracy =
     attempts === 0 ? 100 : Math.round((comparisons / attempts) * 100);
+
+  useEffect(() => {
+    if (step !== 2 || complete || resolved || candidateProfit >= 0) {
+      return;
+    }
+
+    const thinkTimer = setTimeout(() => {
+      setComparisons((currentComparisons) => currentComparisons + 1);
+      setResolved(true);
+      setResolvedVerdict("skip");
+      setStreak((currentStreak) => {
+        setScore(
+          (currentScore) => currentScore + 100 + currentStreak * 20,
+        );
+        return currentStreak + 1;
+      });
+      setMessage(
+        `I’m at j = ${sellDay}. prices[j] − prices[i] is $${sellPrice} − $${buyPrice} = $${candidateProfit}. My profit floor is $0, so a negative result can never become max. I’ll skip it automatically.`,
+      );
+    }, 700);
+
+    return () => clearTimeout(thinkTimer);
+  }, [
+    buyDay,
+    buyPrice,
+    candidateProfit,
+    complete,
+    resolved,
+    sellDay,
+    sellPrice,
+    step,
+  ]);
+
+  useEffect(() => {
+    if (
+      step !== 2 ||
+      complete ||
+      !resolved ||
+      resolvedVerdict !== "skip" ||
+      candidateProfit >= 0
+    ) {
+      return;
+    }
+
+    const moveTimer = setTimeout(() => {
+      if (sellDay < round.prices.length - 1) {
+        setSellDay((currentSellDay) => currentSellDay + 1);
+        setResolved(false);
+        setResolvedVerdict(null);
+        setMessage(
+          `Negative result skipped. I moved j to index ${sellDay + 1}, while i stays pinned at index ${buyDay}.`,
+        );
+        return;
+      }
+
+      if (buyDay < round.prices.length - 2) {
+        const nextBuyDay = buyDay + 1;
+        setBuyDay(nextBuyDay);
+        setSellDay(nextBuyDay + 1);
+        setResolved(false);
+        setResolvedVerdict(null);
+        setMessage(
+          `The inner loop is finished for i = ${buyDay}. I moved i to ${nextBuyDay} and reset j to ${nextBuyDay + 1}.`,
+        );
+        return;
+      }
+
+      setComplete(true);
+      setMessage(
+        `All ${totalComparisons} legal index pairs were checked. Bit’s maximum profit is $${bestProfit}.`,
+      );
+    }, 2200);
+
+    return () => clearTimeout(moveTimer);
+  }, [
+    bestProfit,
+    buyDay,
+    candidateProfit,
+    complete,
+    resolved,
+    resolvedVerdict,
+    round.prices.length,
+    sellDay,
+    step,
+    totalComparisons,
+  ]);
 
   function goTo(nextStep: number) {
     setStep(nextStep);
@@ -72,7 +149,7 @@ export function ConceptWalkthrough() {
     setStreak(0);
     setMistakes(0);
     setMessage(
-      "New map loaded. Bit bought on day 1 and will test every later sell day.",
+      "New array loaded. i is pinned at index 0, and Bit starts checking with j at index 1.",
     );
   }
 
@@ -111,11 +188,11 @@ export function ConceptWalkthrough() {
       setBestBuyDay(buyDay);
       setBestSellDay(sellDay);
       setMessage(
-        `$${candidateProfit} beats the previous record of $${bestProfit}. Bit replaced max profit and saved this pair.`,
+        `$${candidateProfit} beats the previous max of $${bestProfit}. Bit saved indexes [${buyDay}, ${sellDay}] as the new best pair.`,
       );
-    } else if (candidateProfit <= 0) {
+    } else if (candidateProfit === 0) {
       setMessage(
-        `Selling today gives $${candidateProfit}. That is not profitable, so Bit skips this day.`,
+        `The difference is $0, equal to the profit floor—not greater than max—so Bit skips this pair.`,
       );
     } else {
       setMessage(
@@ -132,7 +209,7 @@ export function ConceptWalkthrough() {
       setResolved(false);
       setResolvedVerdict(null);
       setMessage(
-        `Bit moved to day ${sellDay + 2}. It still remembers buying on day ${buyDay + 1} for $${buyPrice}.`,
+        `Bit moved j to index ${sellDay + 1}. It still remembers prices[i] = $${buyPrice} at i = ${buyDay}.`,
       );
       return;
     }
@@ -144,14 +221,14 @@ export function ConceptWalkthrough() {
       setResolved(false);
       setResolvedVerdict(null);
       setMessage(
-        `Every sell day after day ${buyDay + 1} was checked. Bit now buys on day ${nextBuyDay + 1} and starts the inner loop again.`,
+        `Every j after i = ${buyDay} was checked. Bit moved i to ${nextBuyDay}, then starts the inner loop at j = ${nextBuyDay + 1}.`,
       );
       return;
     }
 
     setComplete(true);
     setMessage(
-      `All ${totalComparisons} legal buy–sell pairs were checked. Bit’s maximum is $${bestProfit}.`,
+      `All ${totalComparisons} legal index pairs were checked. Bit’s maximum is $${bestProfit}.`,
     );
   }
 
@@ -260,8 +337,8 @@ export function ConceptWalkthrough() {
               <p>
                 A human sees the entire chart and spots the low point and later
                 high point instantly. Bit begins with a simpler machine plan:
-                pin one buy day, test every later sell day, remember the best,
-                then repeat from the next buy day.
+                pin buy index i, move sell index j through every cell to its
+                right, remember the best, then repeat from the next i.
               </p>
             </div>
 
@@ -297,12 +374,12 @@ export function ConceptWalkthrough() {
                 </div>
                 <div className="machine-state">
                   <div>
-                    <span>buyDay</span>
-                    <strong>D1</strong>
+                    <span>buy index i</span>
+                    <strong>0</strong>
                   </div>
                   <div>
-                    <span>sellDay</span>
-                    <strong>D2</strong>
+                    <span>sell index j</span>
+                    <strong>1</strong>
                   </div>
                   <div>
                     <span>maxProfit</span>
@@ -339,11 +416,12 @@ export function ConceptWalkthrough() {
           >
             <div className="candy-game-header">
               <div>
-                <span className="game-kicker">Pair quest · nested loops</span>
-                <h2>Walk the stock map.</h2>
+                <span className="game-kicker">Array quest · i / j pointers</span>
+                <h2>Move Bit through the indexes.</h2>
                 <p>
-                  Hold one buy day. Visit every later sell day. Keep only a
-                  profit that beats Bit&apos;s current record.
+                  Pin <code>i</code> as the buy index. Move Bit as{" "}
+                  <code>j</code> through every index to its right. Never let
+                  profit fall below zero.
                 </p>
               </div>
               <div className="run-stats" aria-label="Current run statistics">
@@ -389,102 +467,116 @@ export function ConceptWalkthrough() {
                   BIT&apos;S BUY MEMORY · OUTER LOOP
                 </span>
                 <h3>
-                  “I bought on day {buyDay + 1} for ${buyPrice}.”
+                  “I&apos;m at i = {buyDay}. I bought prices[i] = ${buyPrice}.”
                 </h3>
                 <p>
-                  I will keep this buy fixed while I try every sell day to its
-                  right.
+                  I keep this index pinned while j checks every cell to its
+                  right. My minimum possible answer is always zero.
                 </p>
                 <div className="thought-memory">
                   <div>
-                    <span>BUY</span>
-                    <strong>D{buyDay + 1} · ${buyPrice}</strong>
+                    <span>PINNED BUY</span>
+                    <strong>i = {buyDay} · ${buyPrice}</strong>
                   </div>
                   <div>
                     <span>MAX SO FAR</span>
                     <strong>${bestProfit}</strong>
                   </div>
+                  <div>
+                    <span>PROFIT FLOOR</span>
+                    <strong>$0</strong>
+                  </div>
                 </div>
               </aside>
 
               <div
-                className="candy-map"
-                aria-label="Winding stock-price map"
+                className="array-stage"
+                aria-label="Stock prices array with buy and sell indexes"
               >
-                {mapPoints.slice(0, -1).map((_, index) => (
-                  <span
-                    className={`map-link map-link--${index + 1}`}
-                    aria-hidden="true"
-                    key={`link-${index}`}
-                  />
-                ))}
-
-                {round.prices.map((price, index) => {
-                  const point = mapPoints[index];
-                  const nodeLabel =
-                    index === buyDay
-                      ? "BUY"
-                      : index === sellDay && !complete
-                        ? "CHECK"
-                        : index === bestBuyDay
-                          ? "BEST BUY"
-                          : index === bestSellDay
-                            ? "BEST SELL"
-                            : "";
-
-                  return (
-                    <div
-                      className={[
-                        "map-node",
-                        index === buyDay ? "is-buy" : "",
-                        index === sellDay && !complete ? "is-checking" : "",
-                        index === bestBuyDay || index === bestSellDay
-                          ? "is-record"
-                          : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      style={{ left: `${point.x}%`, top: `${point.y}%` }}
-                      aria-label={`Day ${index + 1}, stock price $${price}${
-                        nodeLabel ? `, ${nodeLabel}` : ""
-                      }`}
-                      key={`map-day-${index}`}
-                    >
-                      <small>D{index + 1}</small>
-                      <strong>${price}</strong>
-                      <em>{nodeLabel}</em>
-                    </div>
-                  );
-                })}
-
-                <div
-                  className="bit-mascot map-bit"
-                  style={{
-                    left: `${mapPoints[sellDay].x}%`,
-                    top: `${mapPoints[sellDay].y}%`,
-                  }}
-                  aria-label={`Bit is checking sell day ${sellDay + 1}`}
-                >
-                  <span className="bit-antenna" aria-hidden="true" />
-                  <span className="bit-face" aria-hidden="true">
-                    <i />
-                    <i />
-                  </span>
-                  <small>BIT</small>
+                <div className="array-caption">
+                  <code>prices</code>
+                  <span>ARRAY · LENGTH {round.prices.length}</span>
                 </div>
+                <div className="array-scroll">
+                  <div
+                    className="array-track"
+                    style={{
+                      gridTemplateColumns: `repeat(${round.prices.length}, minmax(58px, 1fr))`,
+                    }}
+                  >
+                    <div
+                      className="bit-mascot array-bit"
+                      style={{
+                        left: `${((sellDay + 0.5) / round.prices.length) * 100}%`,
+                      }}
+                      aria-label={`Bit is the sell pointer at index ${sellDay}`}
+                    >
+                      <span className="bit-antenna" aria-hidden="true" />
+                      <span className="bit-face" aria-hidden="true">
+                        <i />
+                        <i />
+                      </span>
+                      <small>BIT · j</small>
+                    </div>
+
+                    {round.prices.map((price, index) => (
+                      <div
+                        className={[
+                          "array-cell",
+                          index === buyDay ? "is-buy" : "",
+                          index === sellDay && !complete ? "is-checking" : "",
+                          index === bestBuyDay || index === bestSellDay
+                            ? "is-record"
+                            : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        aria-label={`Index ${index}, stock price $${price}`}
+                        key={`array-index-${index}`}
+                      >
+                        <small>INDEX {index}</small>
+                        <strong>{price}</strong>
+                      </div>
+                    ))}
+
+                    <div
+                      className="array-pointer array-pointer--buy"
+                      style={{
+                        left: `${((buyDay + 0.5) / round.prices.length) * 100}%`,
+                      }}
+                    >
+                      <i aria-hidden="true" />
+                      i = {buyDay} · BUY
+                    </div>
+                    <div
+                      className="array-pointer array-pointer--sell"
+                      style={{
+                        left: `${((sellDay + 0.5) / round.prices.length) * 100}%`,
+                      }}
+                    >
+                      j = {sellDay} · SELL
+                      <i aria-hidden="true" />
+                    </div>
+                  </div>
+                </div>
+                <p className="array-rule">
+                  <code>maxProfit = 0</code>
+                  No trade—or buying and selling on the same day—sets the
+                  zero-profit floor.
+                </p>
               </div>
 
               <aside className="thought-bubble thought-bubble--sell">
                 {complete ? (
                   <div className="map-complete">
                     <span className="decision-kicker">
-                      MAP COMPLETE · O(n²)
+                      ARRAY SCAN COMPLETE · O(n²)
                     </span>
                     <h3>Bit checked every legal pair.</h3>
                     <p>
-                      The maximum came from buying on day{" "}
-                      {bestBuyDay === null ? "—" : bestBuyDay + 1} and selling
-                      on day {bestSellDay === null ? "—" : bestSellDay + 1}.
+                      The maximum came from buying at index{" "}
+                      {bestBuyDay === null ? "—" : bestBuyDay} and selling at
+                      index {bestSellDay === null ? "—" : bestSellDay}.
                     </p>
                     <div className="completion-metrics">
                       <div>
@@ -506,47 +598,59 @@ export function ConceptWalkthrough() {
                       onClick={() => resetGame(true)}
                       tabIndex={step === 2 ? 0 : -1}
                     >
-                      Load a new map
+                      Load a new array
                     </button>
                   </div>
                 ) : (
                   <>
                     <span className="decision-kicker">
-                      TODAY&apos;S CHECK · INNER LOOP
+                      CURRENT INDEX CHECK · INNER LOOP
                     </span>
                     <h3>
-                      “If I sell on day {sellDay + 1} for ${sellPrice}…”
+                      “I&apos;m at j = {sellDay}. If I sell prices[j] = $
+                      {sellPrice}…”
                     </h3>
                     <code>
-                      sell ${sellPrice} − buy ${buyPrice} ={" "}
-                      <strong>${candidateProfit}</strong>
+                      prices[{sellDay}] − prices[{buyDay}] = ${sellPrice} − $
+                      {buyPrice} = <strong>${candidateProfit}</strong>
                     </code>
 
                     {!resolved ? (
-                      <>
-                        <p>
-                          Is ${candidateProfit} greater than my saved maximum of
-                          {" "}${bestProfit}?
-                        </p>
-                        <div className="state-actions">
-                          <button
-                            type="button"
-                            onClick={() => chooseVerdict("skip")}
-                            tabIndex={step === 2 ? 0 : -1}
-                          >
-                            <span>NOT GREATER</span>
-                            Skip this pair
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => chooseVerdict("update")}
-                            tabIndex={step === 2 ? 0 : -1}
-                          >
-                            <span>NEW RECORD</span>
-                            Update max
-                          </button>
+                      candidateProfit < 0 ? (
+                        <div className="auto-skip-card" aria-live="polite">
+                          <span>NEGATIVE RESULT · AUTO SKIP</span>
+                          <p>
+                            ${candidateProfit} is below my $0 floor. I cannot
+                            save a loss, so I&apos;ll skip this index and move j.
+                          </p>
+                          <i aria-hidden="true" />
                         </div>
-                      </>
+                      ) : (
+                        <>
+                          <p>
+                            ${candidateProfit} is not negative. Is it greater
+                            than my saved max of ${bestProfit}?
+                          </p>
+                          <div className="state-actions">
+                            <button
+                              type="button"
+                              onClick={() => chooseVerdict("skip")}
+                              tabIndex={step === 2 ? 0 : -1}
+                            >
+                              <span>NOT GREATER</span>
+                              Skip this pair
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => chooseVerdict("update")}
+                              tabIndex={step === 2 ? 0 : -1}
+                            >
+                              <span>NEW RECORD</span>
+                              Update max
+                            </button>
+                          </div>
+                        </>
+                      )
                     ) : (
                       <div className="resolved-check">
                         <span
@@ -558,20 +662,28 @@ export function ConceptWalkthrough() {
                         >
                           {resolvedVerdict === "update"
                             ? `New maximum: $${candidateProfit}`
-                            : "Pair skipped"}
+                            : candidateProfit < 0
+                              ? "Loss rejected · moving automatically"
+                              : "Pair skipped"}
                         </span>
-                        <button
-                          type="button"
-                          className="button button-primary"
-                          onClick={advanceBit}
-                          tabIndex={step === 2 ? 0 : -1}
-                        >
-                          {sellDay < round.prices.length - 1
-                            ? `Move Bit to day ${sellDay + 2}`
-                            : buyDay < round.prices.length - 2
-                              ? `Now buy on day ${buyDay + 2}`
-                              : "Finish the scan"}
-                        </button>
+                        {candidateProfit < 0 ? (
+                          <div className="auto-move">
+                            Bit is moving j to the next index…
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="button button-primary"
+                            onClick={advanceBit}
+                            tabIndex={step === 2 ? 0 : -1}
+                          >
+                            {sellDay < round.prices.length - 1
+                              ? `Move Bit to index ${sellDay + 1}`
+                              : buyDay < round.prices.length - 2
+                                ? `Move i to index ${buyDay + 1}`
+                                : "Finish the scan"}
+                          </button>
+                        )}
                       </div>
                     )}
                   </>
