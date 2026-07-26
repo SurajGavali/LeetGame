@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/challenge.dart';
 import '../models/game_state.dart';
 import '../utils/theme.dart';
+import 'bubble_sort_screen.dart';
 import 'challenge_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -48,11 +49,14 @@ class HomeScreen extends StatelessWidget {
                             children: [
                               Text(
                                 'LeetGame',
-                                style: Theme.of(context).textTheme.headlineMedium,
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.headlineMedium,
                               ),
                               Text(
                                 'Think Like a Computer',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
                                       color: AppColors.accentCyan,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -65,6 +69,20 @@ class HomeScreen extends StatelessWidget {
 
                       // XP / Level Card
                       _buildProgressCard(context, gameState),
+                      const SizedBox(height: 28),
+
+                      // Algorithm games
+                      Text(
+                        'Algorithm Arcade',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Step inside the algorithm and make every move',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 16),
+                      _buildBubbleSortCard(context, gameState),
                       const SizedBox(height: 28),
 
                       // Section title
@@ -86,23 +104,20 @@ class HomeScreen extends StatelessWidget {
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    return FadeInUp(
-                      delay: Duration(milliseconds: 200 + index * 100),
-                      duration: const Duration(milliseconds: 500),
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: _buildChallengeCard(
-                          context,
-                          allChallenges[index],
-                          gameState,
-                        ),
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  return FadeInUp(
+                    delay: Duration(milliseconds: 200 + index * 100),
+                    duration: const Duration(milliseconds: 500),
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: _buildChallengeCard(
+                        context,
+                        allChallenges[index],
+                        gameState,
                       ),
-                    );
-                  },
-                  childCount: allChallenges.length,
-                ),
+                    ),
+                  );
+                }, childCount: allChallenges.length),
               ),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
@@ -139,14 +154,17 @@ class HomeScreen extends StatelessWidget {
                   const SizedBox(width: 6),
                   Text(
                     'Level ${gameState.level}',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          color: Colors.white,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.headlineSmall?.copyWith(color: Colors.white),
                   ),
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(20),
@@ -154,9 +172,9 @@ class HomeScreen extends StatelessWidget {
                 child: Text(
                   '${gameState.totalXP} XP',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ],
@@ -173,12 +191,162 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            '${gameState.challengesCompleted} / ${allChallenges.length} challenges completed',
+            '${gameState.challengesCompleted} / ${allChallenges.length + 1} activities mastered',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.7),
-                ),
+              color: Colors.white.withValues(alpha: 0.7),
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildBubbleSortCard(BuildContext context, GameState gameState) {
+    final stars = gameState.starsFor('bubble_sort');
+    final isCompleted = stars > 0;
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          PageRouteBuilder(
+            pageBuilder: (_, animation, secondaryAnimation) =>
+                const BubbleSortScreen(),
+            transitionsBuilder: (_, animation, secondaryAnimation, child) {
+              return SlideTransition(
+                position:
+                    Tween<Offset>(
+                      begin: const Offset(1, 0),
+                      end: Offset.zero,
+                    ).animate(
+                      CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOutCubic,
+                      ),
+                    ),
+                child: child,
+              );
+            },
+            transitionDuration: const Duration(milliseconds: 400),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF171B35), Color(0xFF20234A)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isCompleted
+                ? AppColors.success.withValues(alpha: 0.45)
+                : AppColors.accentPurple.withValues(alpha: 0.35),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.accentPurple.withValues(alpha: 0.12),
+              blurRadius: 22,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    gradient: AppColors.purpleGradient,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(
+                    Icons.sort_rounded,
+                    color: Colors.white,
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'SORTING • BEGINNER',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.accentPurple,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 10,
+                          letterSpacing: 0.7,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Bubble Sort',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                    ],
+                  ),
+                ),
+                Row(
+                  children: List.generate(
+                    3,
+                    (index) => Icon(
+                      index < stars
+                          ? Icons.star_rounded
+                          : Icons.star_outline_rounded,
+                      color: index < stars ? Colors.amber : AppColors.textMuted,
+                      size: 19,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 15),
+            Text(
+              'Compare adjacent values, decide when to swap, and watch the largest value bubble into place.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(height: 1.45),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Icon(
+                  Icons.bolt_rounded,
+                  color: AppColors.accentCyan,
+                  size: 17,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '+120 XP',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.accentCyan,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  isCompleted ? 'Play again' : 'Enter machine',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.accentPurple,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 5),
+                const Icon(
+                  Icons.arrow_forward_rounded,
+                  color: AppColors.accentPurple,
+                  size: 17,
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -208,16 +376,20 @@ class HomeScreen extends StatelessWidget {
       onTap: () {
         Navigator.of(context).push(
           PageRouteBuilder(
-            pageBuilder: (context1, anim1, anim2) => ChallengeScreen(challenge: challenge),
+            pageBuilder: (context1, anim1, anim2) =>
+                ChallengeScreen(challenge: challenge),
             transitionsBuilder: (context2, animation, anim3, child) {
               return SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(1, 0),
-                  end: Offset.zero,
-                ).animate(CurvedAnimation(
-                  parent: animation,
-                  curve: Curves.easeOutCubic,
-                )),
+                position:
+                    Tween<Offset>(
+                      begin: const Offset(1, 0),
+                      end: Offset.zero,
+                    ).animate(
+                      CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOutCubic,
+                      ),
+                    ),
                 child: child,
               );
             },
@@ -261,9 +433,9 @@ class HomeScreen extends StatelessWidget {
                   child: Text(
                     challenge.difficultyLabel,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: difficultyColor,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      color: difficultyColor,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -279,9 +451,9 @@ class HomeScreen extends StatelessWidget {
                   child: Text(
                     '#${challenge.leetcodeNumber}',
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: AppColors.textMuted,
-                          fontSize: 11,
-                        ),
+                      color: AppColors.textMuted,
+                      fontSize: 11,
+                    ),
                   ),
                 ),
                 const Spacer(),
@@ -291,7 +463,9 @@ class HomeScreen extends StatelessWidget {
                     return Padding(
                       padding: const EdgeInsets.only(left: 2),
                       child: Icon(
-                        i < stars ? Icons.star_rounded : Icons.star_outline_rounded,
+                        i < stars
+                            ? Icons.star_rounded
+                            : Icons.star_outline_rounded,
                         color: i < stars ? Colors.amber : AppColors.textMuted,
                         size: 20,
                       ),
@@ -303,9 +477,9 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 14),
             Text(
               challenge.title,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontSize: 16,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontSize: 16),
             ),
             const SizedBox(height: 6),
             Text(
@@ -329,9 +503,9 @@ class HomeScreen extends StatelessWidget {
                     Text(
                       '+${challenge.xpReward} XP',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppColors.accentCyan,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        color: AppColors.accentCyan,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
@@ -340,9 +514,9 @@ class HomeScreen extends StatelessWidget {
                     Text(
                       isCompleted ? 'Play Again' : 'Start',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppColors.accentBlue,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        color: AppColors.accentBlue,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(width: 4),
                     const Icon(

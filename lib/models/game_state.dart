@@ -30,13 +30,10 @@ class GameState extends ChangeNotifier {
 
     if (stars > previousStars) {
       _bestStars[challengeId] = stars;
-      // Only add XP difference for improvement
-      final xpMultiplier = stars > previousStars ? 1.0 : 0.0;
-      _totalXP += (xp * xpMultiplier).round();
     }
 
     if (previousStars == 0) {
-      // First completion — award full XP
+      // Award XP once, on the first successful completion.
       _totalXP += xp;
     }
 
