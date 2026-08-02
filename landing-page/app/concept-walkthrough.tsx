@@ -1,1597 +1,1352 @@
 "use client";
 
-import { useEffect, useReducer, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  type MouseEvent,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
+import {
+  buildBinaryTrace,
+  calculateShiftSummary,
+  createHuntRun,
+  evaluateGuidedCode,
+  parseWarehouseProgress,
+  scanShelf,
+  warehouseShipments,
+} from "./binary-search-engine.mjs";
 
-const examplePrices = [7, 1, 5, 3, 6, 4];
+type Stage =
+  | "briefing"
+  | "hunt"
+  | "shipment-result"
+  | "shift-result"
+  | "reveal"
+  | "python"
+  | "complete";
 
-const challengeLevels = [
-  {
-    id: "clear-valley",
-    title: "Clear Valley",
-    lesson: "Find a low price before a later rise.",
-    prices: [8, 3, 6, 2, 7, 4],
-    hint: "The cheapest price is useful only if a higher price comes after it.",
-  },
-  {
-    id: "multiple-peaks",
-    title: "False Peak",
-    lesson: "The first profit is not always the best profit.",
-    prices: [3, 7, 2, 5, 1, 9],
-    hint: "A later valley can create a much larger trade.",
-  },
-  {
-    id: "order-constraint",
-    title: "Time Arrow",
-    lesson: "A sell must always happen after the buy.",
-    prices: [8, 2, 7, 1, 6, 3],
-    hint: "Do not pair a cheap price with a peak that already passed.",
-  },
-  {
-    id: "declining",
-    title: "No Trade",
-    lesson: "Sometimes zero is the strongest answer.",
-    prices: [9, 7, 5, 3, 1],
-    hint: "You never have to lock in a loss.",
-  },
-  {
-    id: "recovery",
-    title: "Recovery",
-    lesson: "Hold through noise when a stronger exit may appear.",
-    prices: [5, 3, 4, 2, 8, 6],
-    hint: "Compare every new opportunity with the best one you have seen.",
-  },
-  {
-    id: "long-run",
-    title: "Long Run",
-    lesson: "Carry the same memory across a larger array.",
-    prices: [7, 2, 5, 1, 4, 9, 3, 10],
-    hint: "Remember one low price and one best profit.",
-  },
-];
+type Relation = "lower" | "equal" | "higher";
 
-type GameView = "challenge" | "result" | "debrief" | "debrief-complete";
-type TradeAction = "buy" | "wait" | "hold" | "sell";
-type DebriefAction = "min" | "max" | "keep";
-
-type LockedTrade = {
-  buyIndex: number;
-  sellIndex: number;
-  profit: number;
-};
-
-type AttemptResult = {
-  attempt: number;
-  profit: number;
-  stars: number;
-  score: number;
-  trade: LockedTrade | null;
-};
-
-type LevelProgress = {
-  unlocked: boolean;
-  completed: boolean;
-  bestStars: number;
-  bestScore: number;
-};
-
-type DebriefState = {
+type ScanRecord = {
   index: number;
-  minPrice: number;
-  minIndex: number;
-  maxProfit: number;
-  bestBuy: number | null;
-  bestSell: number | null;
-  resolved: boolean;
-  lastAction: DebriefAction | null;
-  feedback: string;
+  value: number;
+  relation: Relation;
+  lowBefore: number;
+  highBefore: number;
+  lowAfter: number;
+  highAfter: number;
+};
+
+type HuntRun = {
+  shipmentIndex: number;
+  low: number;
+  high: number;
+  batteries: number;
+  status: "searching" | "found" | "failed";
+  scannedIndices: number[];
+  history: ScanRecord[];
+  lastScan: ScanRecord | null;
+};
+
+type ShipmentResult = {
+  shipmentIndex: number;
+  scans: number;
+  unusedBatteries: number;
+  secondsLeft: number;
+  history: ScanRecord[];
+};
+
+type ShiftSummary = {
+  score: number;
+  stars: number;
+  totalScans: number;
+  unusedBatteries: number;
+  secondsLeft: number;
+};
+
+type CodeCase = {
+  name: string;
+  passed: boolean;
+  expected: number;
+  actual: number | null;
+};
+
+type CodeEvaluation = {
+  passed: boolean;
+  slotErrors: Partial<Record<"mid" | "left" | "right", string>>;
+  cases: CodeCase[];
+};
+
+type CodeDraft = {
+  mid: string;
+  left: string;
+  right: string;
+};
+
+type UnlockedStage = "hunt" | "reveal" | "python" | "complete";
+
+type WarehouseProgress = {
+  version: number;
+  currentShipmentIndex: number;
+  unlockedStage: UnlockedStage;
+  completedShipmentIds: string[];
+  completedShipments: {
+    shipmentIndex: number;
+    scannedIndices: number[];
+    secondsLeft: number;
+  }[];
+  failures: number;
+  bestScore: number;
+  bestStars: number;
+  revealCompleted: boolean;
+  pythonCompleted: boolean;
 };
 
 type GameState = {
-  view: GameView;
-  levelIndex: number;
-  attempt: number;
-  currentIndex: number;
-  revealedThrough: number;
-  holding: { buyIndex: number; buyPrice: number; maxSeenProfit: number } | null;
-  trade: LockedTrade | null;
-  profit: number;
-  attemptHistory: AttemptResult[];
-  progress: LevelProgress[];
-  score: number;
+  stage: Stage;
+  shipmentIndex: number;
+  run: HuntRun;
+  results: ShipmentResult[];
+  failures: number;
+  roundToken: number;
   reaction: string;
-  recordPulseId: number;
-  hintUsed: boolean;
-  debrief: DebriefState | null;
+  summary: ShiftSummary | null;
+  revealStep: number;
+  code: CodeDraft;
+  codeAttempts: number;
+  codeEvaluation: CodeEvaluation | null;
+  unlockedStage: UnlockedStage;
+  bestScore: number;
+  bestStars: number;
+  hydrated: boolean;
 };
 
 type GameAction =
-  | { type: "TRADE_ACTION"; action: TradeAction }
-  | { type: "FINISH_NO_TRADE" }
-  | { type: "RETRY" }
-  | { type: "USE_HINT" }
-  | { type: "START_DEBRIEF" }
-  | { type: "DEBRIEF_CHOOSE"; action: DebriefAction }
-  | { type: "DEBRIEF_NEXT" }
-  | { type: "SELECT_LEVEL"; levelIndex: number }
-  | { type: "NEXT_LEVEL" }
+  | { type: "START_SHIFT" }
+  | { type: "SCAN"; index: number; secondsLeft: number }
+  | { type: "NEXT_SHIPMENT" }
+  | { type: "RETRY_SHIPMENT" }
+  | { type: "START_REVEAL" }
+  | { type: "NEXT_REVEAL" }
+  | { type: "START_PYTHON" }
+  | { type: "SET_CODE"; slot: keyof CodeDraft; value: string }
+  | { type: "RUN_CODE"; evaluation: CodeEvaluation }
+  | { type: "SHOW_SOLUTION" }
+  | { type: "RESTART" }
+  | { type: "RESUME" }
   | {
-      type: "HYDRATE_PROGRESS";
-      progress: LevelProgress[];
-      score: number;
-      levelIndex: number;
+      type: "HYDRATE";
+      progress: WarehouseProgress;
     };
 
-function findOptimalTrade(prices: number[]) {
-  if (prices.length < 2) {
-    return { profit: 0, buyIndex: null, sellIndex: null };
-  }
-
-  let minPrice = prices[0];
-  let minIndex = 0;
-  let profit = 0;
-  let buyIndex: number | null = null;
-  let sellIndex: number | null = null;
-
-  for (let index = 1; index < prices.length; index += 1) {
-    const candidate = prices[index] - minPrice;
-    if (candidate > profit) {
-      profit = candidate;
-      buyIndex = minIndex;
-      sellIndex = index;
-    }
-    if (prices[index] < minPrice) {
-      minPrice = prices[index];
-      minIndex = index;
-    }
-  }
-
-  return { profit, buyIndex, sellIndex };
-}
-
-function rateAttempt(profit: number, optimalProfit: number) {
-  if (optimalProfit === 0 && profit === 0) return 3;
-  if (profit === optimalProfit && profit > 0) return 3;
-  if (profit > 0) return 2;
-  if (profit === 0) return 1;
-  return 0;
-}
-
-function scoreAttempt(profit: number, optimalProfit: number, attempt: number) {
-  const ratio =
-    optimalProfit === 0
-      ? profit === 0
-        ? 1
-        : 0
-      : Math.max(0, Math.min(1, profit / optimalProfit));
-  const perfectBonus =
-    ratio === 1 ? ([300, 150, 50][Math.min(attempt - 1, 2)] ?? 0) : 0;
-  return Math.round(ratio * 1000) + perfectBonus;
-}
-
-function createProgress(): LevelProgress[] {
-  return challengeLevels.map((_, index) => ({
-    unlocked: index === 0,
-    completed: false,
-    bestStars: 0,
-    bestScore: 0,
-  }));
-}
-
-const initialGameState: GameState = {
-  view: "challenge",
-  levelIndex: 0,
-  attempt: 1,
-  currentIndex: 0,
-  revealedThrough: 0,
-  holding: null,
-  trade: null,
-  profit: 0,
-  attemptHistory: [],
-  progress: createProgress(),
-  score: 0,
-  reaction:
-    "The first price is visible. Future prices are hidden—choose carefully.",
-  recordPulseId: 0,
-  hintUsed: false,
-  debrief: null,
+const progressKey = "leetgame.warehouse.v1";
+const soundKey = "leetgame-sound";
+const stageLabels = ["Mission", "Discovery", "Code"];
+const canonicalCode: CodeDraft = {
+  mid: "left + (right - left) // 2",
+  left: "left = mid + 1",
+  right: "right = mid - 1",
 };
 
-function resetLevel(
-  state: GameState,
-  levelIndex: number,
-  keepHistory = false,
-): GameState {
+function createInitialState(): GameState {
   return {
-    ...state,
-    view: "challenge",
-    levelIndex,
-    attempt: keepHistory ? state.attempt + 1 : 1,
-    currentIndex: 0,
-    revealedThrough: keepHistory ? state.revealedThrough : 0,
-    holding: null,
-    trade: null,
-    profit: 0,
-    attemptHistory: keepHistory ? state.attemptHistory : [],
-    reaction: keepHistory
-      ? "You remember the prices you uncovered. Try a stronger trade."
-      : "A new market is open. The future is hidden.",
-    hintUsed: false,
-    debrief: null,
+    stage: "briefing",
+    shipmentIndex: 0,
+    run: createHuntRun(0) as HuntRun,
+    results: [],
+    failures: 0,
+    roundToken: 0,
+    reaction: "A rush manifest just arrived. Bit is ready to scan.",
+    summary: null,
+    revealStep: 0,
+    code: { mid: "", left: "", right: "" },
+    codeAttempts: 0,
+    codeEvaluation: null,
+    unlockedStage: "hunt",
+    bestScore: 0,
+    bestStars: 0,
+    hydrated: false,
   };
 }
 
-function finishAttempt(
-  state: GameState,
-  trade: LockedTrade | null,
-  profit: number,
-): GameState {
-  const level = challengeLevels[state.levelIndex];
-  const optimal = findOptimalTrade(level.prices);
-  const stars = rateAttempt(profit, optimal.profit);
-  const attemptScore = scoreAttempt(profit, optimal.profit, state.attempt);
-  const result: AttemptResult = {
-    attempt: state.attempt,
-    profit,
-    stars,
-    score: attemptScore,
-    trade,
-  };
-  const progress = state.progress.map((item) => ({ ...item }));
-  const previousBest = progress[state.levelIndex].bestScore;
-
-  progress[state.levelIndex] = {
-    ...progress[state.levelIndex],
-    bestStars: Math.max(progress[state.levelIndex].bestStars, stars),
-    bestScore: Math.max(previousBest, attemptScore),
-  };
-
-  if (stars >= 1 && state.levelIndex < progress.length - 1) {
-    progress[state.levelIndex + 1].unlocked = true;
-  }
-
-  return {
-    ...state,
-    view: "result",
-    holding: null,
-    trade,
-    profit,
-    attemptHistory: [...state.attemptHistory, result],
-    progress,
-    score: state.score + Math.max(0, attemptScore - previousBest),
-    reaction:
-      stars === 3
-        ? "You found the strongest possible trade!"
-        : stars === 2
-          ? "You made a profit. There is still a stronger path."
-          : stars === 1
-            ? "You protected the zero-profit floor. Try to find the hidden opportunity."
-            : "That trade lost value. Retry with what the market revealed.",
-  };
-}
-
-function expectedDebriefAction(
-  debrief: DebriefState,
-  prices: number[],
-): DebriefAction {
-  const price = prices[debrief.index];
-  if (price < debrief.minPrice) return "min";
-  if (price - debrief.minPrice > debrief.maxProfit) return "max";
-  return "keep";
+function restoreShipmentResults(progress: WarehouseProgress): ShipmentResult[] {
+  return (progress.completedShipments ?? []).map((checkpoint) => {
+    let run = createHuntRun(checkpoint.shipmentIndex) as HuntRun;
+    checkpoint.scannedIndices.forEach((index) => {
+      run = scanShelf(run, index) as HuntRun;
+    });
+    return {
+      shipmentIndex: checkpoint.shipmentIndex,
+      scans: run.history.length,
+      unusedBatteries: run.batteries,
+      secondsLeft: checkpoint.secondsLeft,
+      history: run.history,
+    };
+  });
 }
 
 function gameReducer(state: GameState, action: GameAction): GameState {
-  const level = challengeLevels[state.levelIndex];
-  const prices = level.prices;
-  const lastIndex = prices.length - 1;
-
-  if (action.type === "TRADE_ACTION" && state.view === "challenge") {
-    const currentPrice = prices[state.currentIndex];
-
-    if (action.action === "buy" && !state.holding && state.currentIndex < lastIndex) {
-      const nextIndex = state.currentIndex + 1;
-      const nextCandidate = Math.max(0, prices[nextIndex] - currentPrice);
-      return {
-        ...state,
-        currentIndex: nextIndex,
-        revealedThrough: Math.max(state.revealedThrough, nextIndex),
-        holding: {
-          buyIndex: state.currentIndex,
-          buyPrice: currentPrice,
-          maxSeenProfit: nextCandidate,
-        },
-        recordPulseId:
-          nextCandidate > 0 ? state.recordPulseId + 1 : state.recordPulseId,
-        reaction: `Bit bought at $${currentPrice}. Index ${nextIndex} revealed $${prices[nextIndex]}.`,
-      };
-    }
-
-    if (action.action === "wait" && !state.holding) {
-      if (state.currentIndex === lastIndex) {
-        return finishAttempt(state, null, 0);
-      }
-      const nextIndex = state.currentIndex + 1;
-      return {
-        ...state,
-        currentIndex: nextIndex,
-        revealedThrough: Math.max(state.revealedThrough, nextIndex),
-        reaction: `Bit waited. Index ${nextIndex} revealed $${prices[nextIndex]}.`,
-      };
-    }
-
-    if (action.action === "hold" && state.holding) {
-      if (state.currentIndex === lastIndex) {
-        return state;
-      }
-      const nextIndex = state.currentIndex + 1;
-      const nextCandidate = prices[nextIndex] - state.holding.buyPrice;
-      const nextMax = Math.max(
-        0,
-        state.holding.maxSeenProfit,
-        nextCandidate,
-      );
-      return {
-        ...state,
-        currentIndex: nextIndex,
-        revealedThrough: Math.max(state.revealedThrough, nextIndex),
-        holding: {
-          ...state.holding,
-          maxSeenProfit: nextMax,
-        },
-        recordPulseId:
-          nextMax > state.holding.maxSeenProfit
-            ? state.recordPulseId + 1
-            : state.recordPulseId,
-        reaction: `Bit held the stock. Index ${nextIndex} revealed $${prices[nextIndex]}.`,
-      };
-    }
-
-    if (action.action === "sell" && state.holding) {
-      const trade: LockedTrade = {
-        buyIndex: state.holding.buyIndex,
-        sellIndex: state.currentIndex,
-        profit: currentPrice - state.holding.buyPrice,
-      };
-      return finishAttempt(state, trade, trade.profit);
-    }
-  }
-
-  if (
-    action.type === "FINISH_NO_TRADE" &&
-    state.view === "challenge" &&
-    !state.holding &&
-    state.currentIndex === lastIndex
-  ) {
-    return finishAttempt(state, null, 0);
-  }
-
-  if (
-    action.type === "RETRY" &&
-    state.view === "result" &&
-    state.attempt < 3
-  ) {
-    return resetLevel(state, state.levelIndex, true);
-  }
-
-  if (action.type === "USE_HINT" && state.view === "challenge") {
+  if (action.type === "START_SHIFT") {
     return {
-      ...state,
-      hintUsed: true,
-      reaction: level.hint,
+      ...createInitialState(),
+      stage: "hunt",
+      run: createHuntRun(0) as HuntRun,
+      roundToken: state.roundToken + 1,
+      unlockedStage: state.unlockedStage,
+      bestScore: state.bestScore,
+      bestStars: state.bestStars,
+      hydrated: state.hydrated,
+      reaction: "Shipment one is live. Choose a shelf to scan.",
     };
   }
 
-  if (action.type === "START_DEBRIEF" && state.view === "result") {
-    if (prices.length < 2) {
-      return { ...state, view: "debrief-complete" };
+  if (action.type === "SCAN" && state.stage === "hunt") {
+    const nextRun = scanShelf(state.run, action.index) as HuntRun;
+    if (nextRun === state.run) return state;
+
+    const shipment = warehouseShipments[state.shipmentIndex];
+    const scanned = nextRun.lastScan;
+    let reaction = "Bit scanned a shelf.";
+    if (scanned?.relation === "lower") {
+      reaction = `${scanned.value} is lower than ${shipment.target}. Lower racks cleared.`;
+    } else if (scanned?.relation === "higher") {
+      reaction = `${scanned.value} is higher than ${shipment.target}. Higher racks cleared.`;
+    } else if (scanned?.relation === "equal") {
+      reaction = `Parcel P-${shipment.target} secured!`;
     }
+
+    if (nextRun.status === "found") {
+      const result: ShipmentResult = {
+        shipmentIndex: state.shipmentIndex,
+        scans: nextRun.history.length,
+        unusedBatteries: nextRun.batteries,
+        secondsLeft: action.secondsLeft,
+        history: nextRun.history,
+      };
+      return {
+        ...state,
+        stage: "shipment-result",
+        run: nextRun,
+        results: [...state.results, result],
+        reaction,
+      };
+    }
+
+    if (nextRun.status === "failed") {
+      return {
+        ...state,
+        stage: "shipment-result",
+        run: nextRun,
+        reaction:
+          "Scanner battery empty. The parcel is still somewhere in the active racks.",
+      };
+    }
+
+    return { ...state, run: nextRun, reaction };
+  }
+
+  if (
+    action.type === "NEXT_SHIPMENT" &&
+    state.stage === "shipment-result" &&
+    state.run.status === "found"
+  ) {
+    if (state.shipmentIndex === warehouseShipments.length - 1) {
+      const summary = calculateShiftSummary(
+        state.results,
+        state.failures,
+      ) as ShiftSummary;
+      return {
+        ...state,
+        stage: "shift-result",
+        summary,
+        unlockedStage: "reveal",
+        bestScore: Math.max(state.bestScore, summary.score),
+        bestStars: Math.max(state.bestStars, summary.stars),
+        reaction: "All three parcels made the truck. Shift cleared.",
+      };
+    }
+
+    const shipmentIndex = state.shipmentIndex + 1;
     return {
       ...state,
-      view: "debrief",
-      currentIndex: 1,
-      debrief: {
-        index: 1,
-        minPrice: prices[0],
-        minIndex: 0,
-        maxProfit: 0,
-        bestBuy: null,
-        bestSell: null,
-        resolved: false,
-        lastAction: null,
-        feedback:
-          "Bit remembers the first price, then compares every new day with it.",
-      },
+      stage: "hunt",
+      shipmentIndex,
+      run: createHuntRun(shipmentIndex) as HuntRun,
+      roundToken: state.roundToken + 1,
+      reaction: `Shipment ${shipmentIndex + 1} is live. Find the next parcel.`,
+    };
+  }
+
+  if (
+    action.type === "RETRY_SHIPMENT" &&
+    state.stage === "shipment-result" &&
+    state.run.status === "failed"
+  ) {
+    return {
+      ...state,
+      stage: "hunt",
+      run: createHuntRun(state.shipmentIndex) as HuntRun,
+      failures: state.failures + 1,
+      roundToken: state.roundToken + 1,
       reaction:
-        "Now teach Bit the rule that guarantees the best answer in one pass.",
+        "Fresh scanner loaded. Try to clear as many shelves as possible with each scan.",
     };
   }
 
-  if (
-    action.type === "DEBRIEF_CHOOSE" &&
-    state.view === "debrief" &&
-    state.debrief &&
-    !state.debrief.resolved
-  ) {
-    const expected = expectedDebriefAction(state.debrief, prices);
-    if (action.action !== expected) {
-      return {
-        ...state,
-        debrief: {
-          ...state.debrief,
-          feedback:
-            expected === "min"
-              ? "This price is lower than Bit’s remembered minimum."
-              : expected === "max"
-                ? "This candidate beats maxProfit and should be saved."
-                : "Neither memory value needs to change on this day.",
-        },
-      };
-    }
+  if (action.type === "START_REVEAL" && state.stage === "shift-result") {
+    return {
+      ...state,
+      stage: "reveal",
+      revealStep: 0,
+      reaction: "Now let’s name the strategy hiding inside your shift.",
+    };
+  }
 
-    const price = prices[state.debrief.index];
-    const candidate = price - state.debrief.minPrice;
-    if (expected === "min") {
-      return {
-        ...state,
-        debrief: {
-          ...state.debrief,
-          minPrice: price,
-          minIndex: state.debrief.index,
-          resolved: true,
-          lastAction: "min",
-          feedback: `Correct. Bit replaced minPrice with $${price}.`,
-        },
-      };
+  if (action.type === "NEXT_REVEAL" && state.stage === "reveal") {
+    if (state.revealStep < 3) {
+      return { ...state, revealStep: state.revealStep + 1 };
     }
-    if (expected === "max") {
+    return {
+      ...state,
+      stage: "python",
+      unlockedStage: "python",
+      reaction: "Turn the warehouse strategy into three lines of Python.",
+    };
+  }
+
+  if (action.type === "START_PYTHON") {
+    return {
+      ...state,
+      stage: "python",
+      unlockedStage: "python",
+      reaction: "The function is ready. Complete the three decisions you made.",
+    };
+  }
+
+  if (action.type === "SET_CODE" && state.stage === "python") {
+    return {
+      ...state,
+      code: { ...state.code, [action.slot]: action.value },
+      codeEvaluation: null,
+    };
+  }
+
+  if (action.type === "RUN_CODE" && state.stage === "python") {
+    const attempts = state.codeAttempts + 1;
+    if (action.evaluation.passed) {
       return {
         ...state,
-        recordPulseId: state.recordPulseId + 1,
-        debrief: {
-          ...state.debrief,
-          maxProfit: candidate,
-          bestBuy: state.debrief.minIndex,
-          bestSell: state.debrief.index,
-          resolved: true,
-          lastAction: "max",
-          feedback: `New record! Bit saved maxProfit = $${candidate}.`,
-        },
+        stage: "complete",
+        codeAttempts: attempts,
+        codeEvaluation: action.evaluation,
+        unlockedStage: "complete",
+        reaction: "Every mission test passed. You can now code the strategy.",
       };
     }
     return {
       ...state,
-      debrief: {
-        ...state.debrief,
-        resolved: true,
-        lastAction: "keep",
-        feedback: "Correct. Bit kept both memory values unchanged.",
-      },
+      codeAttempts: attempts,
+      codeEvaluation: action.evaluation,
+      reaction: "One of the warehouse rules does not match your code yet.",
     };
   }
 
-  if (
-    action.type === "DEBRIEF_NEXT" &&
-    state.view === "debrief" &&
-    state.debrief &&
-    state.debrief.resolved
-  ) {
-    if (state.debrief.index >= lastIndex) {
-      const progress = state.progress.map((item) => ({ ...item }));
-      const levelCompleted =
-        progress[state.levelIndex].bestStars >= 1 || state.attempt >= 3;
-      progress[state.levelIndex].completed = levelCompleted;
-      if (
-        state.levelIndex < progress.length - 1 &&
-        levelCompleted
-      ) {
-        progress[state.levelIndex + 1].unlocked = true;
-      }
+  if (action.type === "SHOW_SOLUTION" && state.stage === "python") {
+    return {
+      ...state,
+      code: canonicalCode,
+      codeEvaluation: null,
+      reaction: "Solution loaded. Run it once to watch Bit prove every case.",
+    };
+  }
+
+  if (action.type === "RESUME") {
+    if (state.unlockedStage === "complete") {
+      return { ...state, stage: "complete" };
+    }
+    if (state.unlockedStage === "python") {
+      return { ...state, stage: "python" };
+    }
+    if (state.unlockedStage === "reveal") {
+      return { ...state, stage: "reveal", revealStep: 0 };
+    }
+    if (state.results.length === warehouseShipments.length) {
+      const summary = calculateShiftSummary(
+        state.results,
+        state.failures,
+      ) as ShiftSummary;
       return {
         ...state,
-        view: "debrief-complete",
-        progress,
-        reaction: "Bit learned the rule and can now guarantee the answer.",
+        stage: "shift-result",
+        summary,
+        unlockedStage: "reveal",
+        bestScore: Math.max(state.bestScore, summary.score),
+        bestStars: Math.max(state.bestStars, summary.stars),
       };
     }
-    const nextIndex = state.debrief.index + 1;
+    if (state.results.length > 0) {
+      return {
+        ...state,
+        stage: "hunt",
+        run: createHuntRun(state.shipmentIndex) as HuntRun,
+        roundToken: state.roundToken + 1,
+        reaction: `Shipment ${state.shipmentIndex + 1} is ready to resume.`,
+      };
+    }
+    return gameReducer(state, { type: "START_SHIFT" });
+  }
+
+  if (action.type === "RESTART") {
     return {
-      ...state,
-      currentIndex: nextIndex,
-      debrief: {
-        ...state.debrief,
-        index: nextIndex,
-        resolved: false,
-        lastAction: null,
-        feedback: "A new day is ready. Which memory should Bit change?",
-      },
-      reaction: `Bit moved to index ${nextIndex}.`,
+      ...createInitialState(),
+      stage: "hunt",
+      run: createHuntRun(0) as HuntRun,
+      roundToken: state.roundToken + 1,
+      unlockedStage: state.unlockedStage,
+      bestScore: state.bestScore,
+      bestStars: state.bestStars,
+      hydrated: state.hydrated,
     };
   }
 
-  if (action.type === "SELECT_LEVEL") {
-    if (!state.progress[action.levelIndex]?.unlocked) return state;
-    return resetLevel(state, action.levelIndex);
-  }
-
-  if (action.type === "NEXT_LEVEL") {
-    if (
-      state.view === "debrief-complete" &&
-      !state.progress[state.levelIndex].completed
-    ) {
-      if (state.attempt < 3) {
-        return resetLevel(state, state.levelIndex, true);
-      }
-      return state;
-    }
-    const nextIndex =
-      state.levelIndex < challengeLevels.length - 1
-        ? state.levelIndex + 1
-        : 0;
-    if (!state.progress[nextIndex]?.unlocked && nextIndex !== 0) {
-      if (state.attempt < 3) {
-        return resetLevel(state, state.levelIndex, true);
-      }
-      return state;
-    }
-    return resetLevel(state, nextIndex);
-  }
-
-  if (
-    action.type === "HYDRATE_PROGRESS" &&
-    action.progress.length === challengeLevels.length
-  ) {
-    const savedLevelIsValid =
-      action.levelIndex >= 0 &&
-      action.levelIndex < challengeLevels.length &&
-      action.progress[action.levelIndex]?.unlocked;
+  if (action.type === "HYDRATE") {
+    const results = restoreShipmentResults(action.progress);
+    const shipmentIndex = Math.min(
+      results.length,
+      warehouseShipments.length - 1,
+    );
     return {
       ...state,
-      levelIndex: savedLevelIsValid ? action.levelIndex : 0,
-      progress: action.progress,
-      score: action.score,
-      reaction: "Your saved level is ready. The future is hidden.",
+      shipmentIndex,
+      run: createHuntRun(shipmentIndex) as HuntRun,
+      results,
+      failures: action.progress.failures ?? 0,
+      unlockedStage: action.progress.unlockedStage,
+      bestScore: action.progress.bestScore,
+      bestStars: action.progress.bestStars,
+      hydrated: true,
     };
   }
 
   return state;
 }
 
-function formatProfit(value: number) {
-  if (value > 0) return `+$${value}`;
-  if (value < 0) return `−$${Math.abs(value)}`;
-  return "$0";
+function stageIndex(stage: Stage) {
+  if (stage === "briefing" || stage === "hunt" || stage === "shipment-result") {
+    return 0;
+  }
+  if (stage === "shift-result" || stage === "reveal") return 1;
+  return 2;
+}
+
+function formatTime(milliseconds: number) {
+  return Math.max(0, Math.ceil(milliseconds / 1000));
+}
+
+function BitMascot({ mood = "ready" }: { mood?: "ready" | "scan" | "win" }) {
+  return (
+    <div className={`warehouse-bit is-${mood}`} aria-hidden="true">
+      <span className="warehouse-bit-antenna" />
+      <span className="warehouse-bit-face">
+        <i />
+        <i />
+      </span>
+      <small>BIT</small>
+    </div>
+  );
 }
 
 export function ConceptWalkthrough() {
-  const [step, setStep] = useState(0);
-  const [game, dispatch] = useReducer(gameReducer, initialGameState);
+  const [game, dispatch] = useReducer(gameReducer, undefined, createInitialState);
   const [soundOn, setSoundOn] = useState(true);
+  const [remainingMs, setRemainingMs] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const soundTimersRef = useRef<number[]>([]);
-  const marketScrollRef = useRef<HTMLDivElement | null>(null);
+  const timerDeadlineRef = useRef(0);
+  const pausedAtRef = useRef<number | null>(null);
   const actionLockRef = useRef(false);
-  const bitThoughtRef = useRef<HTMLDivElement | null>(null);
-  const focusAfterActionRef = useRef(false);
+  const lockTimerRef = useRef<number | null>(null);
+  const rackRef = useRef<HTMLDivElement | null>(null);
+  const stageFocusRef = useRef<HTMLHeadingElement | null>(null);
+  const pythonEditorRef = useRef<HTMLDivElement | null>(null);
 
-  const level = challengeLevels[game.levelIndex];
-  const prices = level.prices;
-  const optimal = findOptimalTrade(prices);
-  const currentPrice = prices[game.currentIndex];
-  const liveProfit = game.holding
-    ? currentPrice - game.holding.buyPrice
-    : 0;
-  const maxSeenProfit = game.holding?.maxSeenProfit ?? 0;
-  const previousSeenProfit = game.holding
-    ? Math.max(
-        0,
-        ...prices
-          .slice(game.holding.buyIndex + 1, game.currentIndex)
-          .map((price) => price - game.holding!.buyPrice),
-      )
-    : 0;
-  const maxJustChanged =
-    Boolean(game.holding) &&
-    liveProfit > 0 &&
-    liveProfit > previousSeenProfit;
-  const bestAttemptProfit = Math.max(
-    0,
-    ...game.attemptHistory.map((result) => result.profit),
+  const shipment = warehouseShipments[game.shipmentIndex];
+  const finalShipment = warehouseShipments[warehouseShipments.length - 1]!;
+  const trace = useMemo(
+    () =>
+      buildBinaryTrace(
+        [...finalShipment.shelves],
+        finalShipment.target,
+      ),
+    [finalShipment],
   );
-  const activeIndex =
-    game.view === "debrief" && game.debrief
-      ? game.debrief.index
-        : game.currentIndex;
-  const daysReached =
-    game.view === "challenge" ? game.currentIndex + 1 : prices.length;
-  const displayedProfit =
-    game.view === "challenge" && game.holding ? liveProfit : game.profit;
-  const rigAlignment =
-    activeIndex === 0
-      ? "is-start"
-      : activeIndex === prices.length - 1
-        ? "is-end"
-        : "is-center";
-  const activePercent = ((activeIndex + 0.5) / prices.length) * 100;
-  const currentResult = game.attemptHistory.at(-1);
-  const resultCanRetry =
-    game.view === "result" &&
-    game.attempt < 3 &&
-    (currentResult?.stars ?? 0) < 3;
-  const revealSolution =
-    game.view === "debrief" ||
-    game.view === "debrief-complete" ||
-    (game.view === "result" && !resultCanRetry);
-  const nextLevelIndex =
-    game.levelIndex < challengeLevels.length - 1
-      ? game.levelIndex + 1
-      : 0;
-  const nextLevelUnlocked =
-    nextLevelIndex === 0 || game.progress[nextLevelIndex].unlocked;
-  const canAdvanceFromLevel =
-    game.progress[game.levelIndex].completed && nextLevelUnlocked;
-  const debriefCandidate =
-    game.debrief && game.view === "debrief"
-      ? prices[game.debrief.index] - game.debrief.minPrice
-      : 0;
-  const debriefExpected =
-    game.debrief && game.view === "debrief"
-      ? expectedDebriefAction(game.debrief, prices)
-      : null;
+  const currentStageIndex = stageIndex(game.stage);
+  const visibleScore =
+    game.summary?.score ??
+    Math.max(
+      0,
+      game.results.reduce(
+        (score, result) =>
+          score +
+          1_000 +
+          result.unusedBatteries * 200 +
+          result.secondsLeft * 10,
+        0,
+      ) -
+        game.failures * 200,
+    );
 
   useEffect(() => {
-    const soundTimers = soundTimersRef.current;
-    const storedSound = window.localStorage.getItem("leetgame-sound");
-    const storedProgress = window.localStorage.getItem("leetgame-progress");
-    const preferenceTimer = window.setTimeout(() => {
-      if (storedSound !== null) setSoundOn(storedSound === "on");
-      if (storedProgress) {
-        try {
-          const saved = JSON.parse(storedProgress) as {
-            progress?: LevelProgress[];
-            score?: number;
-            levelIndex?: number;
-          };
-          if (
-            Array.isArray(saved.progress) &&
-            saved.progress.length === challengeLevels.length
-          ) {
-            dispatch({
-              type: "HYDRATE_PROGRESS",
-              progress: saved.progress,
-              score: typeof saved.score === "number" ? saved.score : 0,
-              levelIndex:
-                typeof saved.levelIndex === "number" ? saved.levelIndex : 0,
-            });
-          }
-        } catch {
-          window.localStorage.removeItem("leetgame-progress");
-        }
-      }
-    }, 0);
+    const storedSound = window.localStorage.getItem(soundKey);
+    const soundFrame =
+      storedSound === null
+        ? null
+        : window.requestAnimationFrame(() => setSoundOn(storedSound === "on"));
+
+    const saved = parseWarehouseProgress(
+      window.localStorage.getItem(progressKey),
+    ) as WarehouseProgress;
+    dispatch({ type: "HYDRATE", progress: saved });
+
     return () => {
-      window.clearTimeout(preferenceTimer);
-      soundTimers.forEach((timer) => window.clearTimeout(timer));
+      if (soundFrame !== null) window.cancelAnimationFrame(soundFrame);
+      if (lockTimerRef.current !== null) window.clearTimeout(lockTimerRef.current);
       if (audioContextRef.current) void audioContextRef.current.close();
     };
   }, []);
 
   useEffect(() => {
+    if (!game.hydrated) return;
     window.localStorage.setItem(
-      "leetgame-progress",
+      progressKey,
       JSON.stringify({
-        progress: game.progress,
-        score: game.score,
-        levelIndex: game.levelIndex,
+        version: 1,
+        currentShipmentIndex: game.shipmentIndex,
+        unlockedStage: game.unlockedStage,
+        completedShipmentIds: game.results.map(
+          (result) => warehouseShipments[result.shipmentIndex].id,
+        ),
+        completedShipments: game.results.map((result) => ({
+          shipmentIndex: result.shipmentIndex,
+          scannedIndices: result.history.map((scan) => scan.index),
+          secondsLeft: result.secondsLeft,
+        })),
+        failures: game.failures,
+        bestScore: game.bestScore,
+        bestStars: game.bestStars,
+        revealCompleted:
+          game.unlockedStage === "python" || game.unlockedStage === "complete",
+        pythonCompleted: game.unlockedStage === "complete",
       }),
     );
-  }, [game.levelIndex, game.progress, game.score]);
-
-  useEffect(() => {
-    if (step !== 2 || !marketScrollRef.current) return;
-    const scroller = marketScrollRef.current;
-    const frame = window.requestAnimationFrame(() => {
-      const target =
-        (activeIndex + 0.5) * (scroller.scrollWidth / prices.length) -
-        scroller.clientWidth / 2;
-      const reducedMotion = window.matchMedia(
-        "(prefers-reduced-motion: reduce)",
-      ).matches;
-      scroller.scrollTo({
-        left: Math.max(0, target),
-        behavior: reducedMotion ? "auto" : "smooth",
-      });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [activeIndex, game.view, prices.length, step]);
-
-  useEffect(() => {
-    if (!focusAfterActionRef.current) return;
-    const frame = window.requestAnimationFrame(() => {
-      bitThoughtRef.current?.focus({ preventScroll: true });
-      focusAfterActionRef.current = false;
-    });
-    return () => window.cancelAnimationFrame(frame);
   }, [
-    activeIndex,
-    game.attempt,
-    game.debrief?.resolved,
-    game.hintUsed,
-    game.view,
+    game.bestScore,
+    game.bestStars,
+    game.codeAttempts,
+    game.failures,
+    game.hydrated,
+    game.results,
+    game.shipmentIndex,
+    game.unlockedStage,
   ]);
 
-  function playSound(
-    tone:
-      | "think"
-      | "move"
-      | "buy"
-      | "sell"
-      | "record"
-      | "wrong"
-      | "finish" = "think",
-    force = false,
-  ) {
-    if ((!soundOn && !force) || typeof window === "undefined") return;
+  useEffect(() => {
+    if (game.stage !== "hunt" || shipment.bonusSeconds <= 0) {
+      return;
+    }
 
-    const context = audioContextRef.current ?? new AudioContext();
+    timerDeadlineRef.current = performance.now() + shipment.bonusSeconds * 1000;
+
+    const update = () => {
+      if (pausedAtRef.current !== null) return;
+      setRemainingMs(Math.max(0, timerDeadlineRef.current - performance.now()));
+    };
+    const initialFrame = window.requestAnimationFrame(update);
+    const interval = window.setInterval(update, 100);
+    const onVisibility = () => {
+      if (document.hidden) {
+        pausedAtRef.current = performance.now();
+      } else if (pausedAtRef.current !== null) {
+        timerDeadlineRef.current += performance.now() - pausedAtRef.current;
+        pausedAtRef.current = null;
+        update();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.cancelAnimationFrame(initialFrame);
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+      timerDeadlineRef.current = 0;
+      pausedAtRef.current = null;
+    };
+  }, [game.roundToken, game.stage, shipment.bonusSeconds]);
+
+  useEffect(() => {
+    if (game.stage === "hunt" && game.run.status === "searching") {
+      const focusIndex =
+        game.run.lastScan?.relation === "higher" ? game.run.high : game.run.low;
+      const frame = window.requestAnimationFrame(() => {
+        rackRef.current
+          ?.querySelector<HTMLButtonElement>(
+            `[data-shelf-index="${focusIndex}"]`,
+          )
+          ?.focus({ preventScroll: true });
+      });
+      return () => window.cancelAnimationFrame(frame);
+    }
+    if (
+      game.stage === "shipment-result" ||
+      game.stage === "shift-result" ||
+      game.stage === "reveal" ||
+      game.stage === "python" ||
+      game.stage === "complete"
+    ) {
+      const frame = window.requestAnimationFrame(() => {
+        stageFocusRef.current?.focus({ preventScroll: true });
+      });
+      return () => window.cancelAnimationFrame(frame);
+    }
+  }, [
+    game.revealStep,
+    game.run.high,
+    game.run.lastScan?.relation,
+    game.run.low,
+    game.run.status,
+    game.stage,
+  ]);
+
+  useEffect(() => {
+    if (
+      game.stage !== "python" ||
+      !game.codeEvaluation ||
+      game.codeEvaluation.passed
+    ) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      pythonEditorRef.current
+        ?.querySelector<HTMLInputElement>(".has-error input")
+        ?.focus({ preventScroll: false });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [game.codeEvaluation, game.stage]);
+
+  function claimActionLock(duration = 420) {
+    if (actionLockRef.current) return false;
+    actionLockRef.current = true;
+    lockTimerRef.current = window.setTimeout(() => {
+      actionLockRef.current = false;
+    }, duration);
+    return true;
+  }
+
+  function playSound(
+    tone: "scan" | "clear" | "fail" | "win" | "code" = "scan",
+  ) {
+    if (!soundOn || typeof window === "undefined") return;
+    const AudioContextClass = window.AudioContext;
+    if (!AudioContextClass) return;
+    const context = audioContextRef.current ?? new AudioContextClass();
     audioContextRef.current = context;
     if (context.state === "suspended") void context.resume();
 
-    const toneMap: Record<string, [number, number, number]> = {
-      think: [390, 560, 0.19],
-      move: [260, 340, 0.1],
-      buy: [320, 470, 0.14],
-      sell: [520, 820, 0.2],
-      record: [620, 980, 0.24],
-      wrong: [210, 155, 0.18],
-      finish: [480, 880, 0.26],
+    const notes: Record<typeof tone, [number, number, number]> = {
+      scan: [340, 520, 0.12],
+      clear: [280, 430, 0.16],
+      fail: [210, 145, 0.2],
+      win: [520, 920, 0.28],
+      code: [440, 720, 0.2],
     };
-    const [startFrequency, endFrequency, duration] = toneMap[tone];
+    const [start, end, duration] = notes[tone];
     const oscillator = context.createOscillator();
     const gain = context.createGain();
     const now = context.currentTime;
-
-    oscillator.type = tone === "think" ? "sine" : "triangle";
-    oscillator.frequency.setValueAtTime(startFrequency, now);
-    oscillator.frequency.exponentialRampToValueAtTime(
-      endFrequency,
-      now + duration * 0.84,
-    );
+    oscillator.type = tone === "fail" ? "sawtooth" : "triangle";
+    oscillator.frequency.setValueAtTime(start, now);
+    oscillator.frequency.exponentialRampToValueAtTime(end, now + duration);
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.07, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.055, now + 0.015);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
     oscillator.connect(gain);
     gain.connect(context.destination);
     oscillator.start(now);
-    oscillator.stop(now + duration + 0.01);
+    oscillator.stop(now + duration + 0.02);
   }
 
-  function queueThoughtSound() {
-    const timer = window.setTimeout(() => playSound("think"), 150);
-    soundTimersRef.current.push(timer);
+  function handleShelfClick(event: MouseEvent<HTMLButtonElement>) {
+    const index = Number(event.currentTarget.dataset.shelfIndex);
+    if (!Number.isInteger(index)) return;
+    if (!claimActionLock()) return;
+    const preview = scanShelf(game.run, index) as HuntRun;
+    if (preview === game.run) return;
+    const feedback =
+      preview.status === "found"
+        ? "win"
+        : preview.status === "failed"
+          ? "fail"
+          : "clear";
+    playSound(feedback);
+    navigator.vibrate?.(
+      feedback === "win"
+        ? [15, 24, 28]
+        : feedback === "fail"
+          ? [22, 28, 22]
+          : 10,
+    );
+    const liveRemainingMs = timerDeadlineRef.current
+      ? Math.max(0, timerDeadlineRef.current - performance.now())
+      : remainingMs;
+    dispatch({
+      type: "SCAN",
+      index,
+      secondsLeft: formatTime(liveRemainingMs),
+    });
   }
 
-  function claimActionLock() {
-    if (actionLockRef.current) return false;
-    actionLockRef.current = true;
-    const timer = window.setTimeout(() => {
-      actionLockRef.current = false;
-    }, 360);
-    soundTimersRef.current.push(timer);
-    return true;
-  }
-
-  function goTo(nextStep: number) {
-    setStep(nextStep);
-    if (nextStep === 2) {
-      playSound("think");
-      navigator.vibrate?.(10);
+  function handleShelfKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>,
+  ) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const index = Number(event.currentTarget.dataset.shelfIndex);
+    if (!Number.isInteger(index)) return;
+    const direction = event.key === "ArrowLeft" ? -1 : 1;
+    let next = index + direction;
+    while (next >= game.run.low && next <= game.run.high) {
+      if (!game.run.scannedIndices.includes(next)) {
+        rackRef.current
+          ?.querySelector<HTMLButtonElement>(`[data-shelf-index="${next}"]`)
+          ?.focus();
+        return;
+      }
+      next += direction;
     }
-  }
-
-  function handleTradeAction(action: TradeAction) {
-    if (!claimActionLock()) return;
-    focusAfterActionRef.current = true;
-    playSound(action === "buy" ? "buy" : action === "sell" ? "sell" : "move");
-    navigator.vibrate?.(action === "sell" ? [12, 20, 16] : 10);
-    dispatch({ type: "TRADE_ACTION", action });
-    if (action !== "sell") queueThoughtSound();
-  }
-
-  function handleNoTrade() {
-    if (!claimActionLock()) return;
-    focusAfterActionRef.current = true;
-    playSound("finish");
-    navigator.vibrate?.(12);
-    dispatch({ type: "FINISH_NO_TRADE" });
-  }
-
-  function handleDebriefChoice(action: DebriefAction) {
-    if (!claimActionLock()) return;
-    focusAfterActionRef.current = true;
-    if (!game.debrief || debriefExpected === null) return;
-    if (action === debriefExpected) {
-      playSound(action === "max" ? "record" : "move");
-      navigator.vibrate?.(action === "max" ? [18, 25, 28] : 10);
-    } else {
-      playSound("wrong");
-    }
-    dispatch({ type: "DEBRIEF_CHOOSE", action });
-  }
-
-  function handleRetry() {
-    if (!claimActionLock()) return;
-    focusAfterActionRef.current = true;
-    playSound("move");
-    dispatch({ type: "RETRY" });
-    queueThoughtSound();
-  }
-
-  function handleStartDebrief() {
-    if (!claimActionLock()) return;
-    focusAfterActionRef.current = true;
-    playSound("think");
-    dispatch({ type: "START_DEBRIEF" });
-  }
-
-  function handleUseHint() {
-    if (!claimActionLock()) return;
-    focusAfterActionRef.current = true;
-    playSound("think");
-    dispatch({ type: "USE_HINT" });
-  }
-
-  function handleDebriefNext() {
-    if (!claimActionLock()) return;
-    focusAfterActionRef.current = true;
-    playSound("move");
-    dispatch({ type: "DEBRIEF_NEXT" });
-    queueThoughtSound();
-  }
-
-  function handleNextLevel() {
-    if (!claimActionLock()) return;
-    focusAfterActionRef.current = true;
-    playSound("finish");
-    dispatch({ type: "NEXT_LEVEL" });
-    queueThoughtSound();
   }
 
   function handleToggleSound() {
-    const nextSound = !soundOn;
-    setSoundOn(nextSound);
-    window.localStorage.setItem(
-      "leetgame-sound",
-      nextSound ? "on" : "off",
-    );
-    if (nextSound) playSound("think", true);
+    const next = !soundOn;
+    setSoundOn(next);
+    window.localStorage.setItem(soundKey, next ? "on" : "off");
+    if (next) window.setTimeout(() => playSound("scan"), 0);
   }
 
-  function renderMascot() {
-    return (
-      <div className="bit-mascot bit-rig-mascot" aria-hidden="true">
-        <span className="bit-antenna" />
-        <span className="bit-face">
-          <i />
-          <i />
-        </span>
-        <small>BIT</small>
-      </div>
-    );
+  function handleRunCode() {
+    const evaluation = evaluateGuidedCode(game.code) as CodeEvaluation;
+    playSound(evaluation.passed ? "code" : "fail");
+    navigator.vibrate?.(evaluation.passed ? [12, 18, 20] : [18, 24, 18]);
+    dispatch({ type: "RUN_CODE", evaluation });
   }
 
-  function renderChallengeThought() {
-    const isLastDay = game.currentIndex === prices.length - 1;
+  function renderBriefing() {
+    const canResume =
+      game.unlockedStage !== "hunt" || game.results.length > 0;
     return (
-      <div
-        className="bit-thought-content"
-        key={`challenge-${game.attempt}-${game.currentIndex}-${game.holding?.buyIndex ?? "flat"}`}
-      >
-        <span className="decision-kicker">
-          DAY {game.currentIndex + 1} · PRICE REVEALED
-        </span>
-        <h3>
-          {game.holding
-            ? `“I bought at $${game.holding.buyPrice}. Selling now gives ${formatProfit(liveProfit)}.”`
-            : isLastDay
-              ? `“This is the last price: $${currentPrice}.”`
-              : `“Today’s price is $${currentPrice}. Should I buy or wait?”`}
-        </h3>
-
-        <div className="bit-memory">
-          <div>
-            <span>POSITION</span>
-            <strong>
-              {game.holding
-                ? `BOUGHT @ $${game.holding.buyPrice}`
-                : "NO STOCK"}
-            </strong>
-          </div>
-          <div>
-            <span>LIVE P/L</span>
-            <strong>{game.holding ? formatProfit(liveProfit) : "—"}</strong>
-          </div>
-          <div
-            className={`memory-max ${maxJustChanged ? "is-new-record" : ""}`}
-            key={`record-${game.recordPulseId}`}
-          >
-            <span>MAX SO FAR</span>
-            <strong>${maxSeenProfit}</strong>
-            {maxJustChanged ? (
-              <em>NEW RECORD</em>
+      <section className="warehouse-briefing" aria-labelledby="warehouse-title">
+        <div className="warehouse-briefing-copy">
+          <span className="warehouse-kicker">WAREHOUSE HUNT · DISPATCH 07</span>
+          <h2 id="warehouse-title">Find the parcel before the scanner dies.</h2>
+          <p>
+            Parcel IDs rise from the lowest rack to the highest. Bit has one
+            rush manifest and only a few scans. Where would you look first?
+          </p>
+          <div className="warehouse-briefing-actions">
+            <button
+              type="button"
+              className="button button-primary button-large"
+              onClick={() => {
+                playSound("scan");
+                dispatch({ type: "START_SHIFT" });
+              }}
+            >
+              Clock in <span aria-hidden="true">→</span>
+            </button>
+            {canResume ? (
+              <button
+                type="button"
+                className="button button-secondary"
+                onClick={() => dispatch({ type: "RESUME" })}
+              >
+                Resume mastery
+              </button>
             ) : null}
           </div>
+          <div className="warehouse-briefing-meta" aria-label="Mission format">
+            <span>3 shipments</span>
+            <span>7 → 15 → 31 racks</span>
+            <span>No lecture</span>
+          </div>
         </div>
 
-        {game.attempt === 3 && !game.hintUsed ? (
-          <button
-            type="button"
-            className="hint-button"
-            onClick={handleUseHint}
-            tabIndex={step === 2 ? 0 : -1}
-          >
-            Need one hint?
-          </button>
-        ) : null}
-
-        {game.hintUsed ? <p className="game-hint">{level.hint}</p> : null}
-
-        <div className="trade-actions">
-          {!game.holding && !isLastDay ? (
-            <>
-              <button
-                type="button"
-                className="trade-action trade-action--primary"
-                onClick={() => handleTradeAction("buy")}
-                tabIndex={step === 2 ? 0 : -1}
-              >
-                <span>LOCK THIS PRICE</span>
-                Buy for ${currentPrice}
-              </button>
-              <button
-                type="button"
-                className="trade-action"
-                onClick={() => handleTradeAction("wait")}
-                tabIndex={step === 2 ? 0 : -1}
-              >
-                <span>REVEAL NEXT DAY</span>
-                Wait
-              </button>
-            </>
-          ) : game.holding && isLastDay ? (
-            <button
-              type="button"
-              className="trade-action trade-action--sell trade-action--wide"
-              onClick={() => handleTradeAction("sell")}
-              tabIndex={step === 2 ? 0 : -1}
-            >
-              <span>FINAL DAY · CLOSE THE POSITION</span>
-              Sell now · {formatProfit(liveProfit)}
-            </button>
-          ) : game.holding ? (
-            <>
-              <button
-                type="button"
-                className="trade-action trade-action--sell"
-                onClick={() => handleTradeAction("sell")}
-                tabIndex={step === 2 ? 0 : -1}
-              >
-                <span>END THE TRADE</span>
-                Sell · {formatProfit(liveProfit)}
-              </button>
-              <button
-                type="button"
-                className="trade-action"
-                onClick={() => handleTradeAction("hold")}
-                tabIndex={step === 2 ? 0 : -1}
-              >
-                <span>REVEAL NEXT DAY</span>
-                Hold
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="trade-action trade-action--primary trade-action--wide"
-              onClick={handleNoTrade}
-              tabIndex={step === 2 ? 0 : -1}
-            >
-              <span>NO LATER SELL EXISTS</span>
-              Finish with no trade
-            </button>
-          )}
+        <div className="warehouse-briefing-scene" aria-hidden="true">
+          <div className="manifest-card">
+            <span>RUSH MANIFEST</span>
+            <strong>FIND P-{warehouseShipments[0].target}</strong>
+            <small>TRUCK 07 · BAY C</small>
+          </div>
+          <div className="briefing-racks">
+            {Array.from({ length: 7 }, (_, index) => (
+              <span key={index}>
+                <i />
+                ?
+              </span>
+            ))}
+          </div>
+          <BitMascot />
+          <div className="warehouse-direction">
+            <span>LOW IDS</span>
+            <i />
+            <span>HIGH IDS</span>
+          </div>
         </div>
-      </div>
+      </section>
     );
   }
 
-  function renderResultThought() {
-    const stars = currentResult?.stars ?? 0;
+  function renderHunt() {
+    const bonusSeconds = formatTime(remainingMs);
     return (
-      <div
-        className="bit-thought-content result-thought"
-        key={`result-${game.attempt}-${game.profit}`}
-      >
-        <span className="decision-kicker">MARKET CLOSED · ATTEMPT {game.attempt}</span>
-        <div
-          className="result-stars"
-          role="img"
-          aria-label={`${stars} out of 3 stars`}
-        >
-          {[0, 1, 2].map((star) => (
-            <span className={star < stars ? "is-earned" : ""} key={star}>
-              ★
-            </span>
-          ))}
-        </div>
-        <h3>
-          You made <strong>{formatProfit(game.profit)}</strong>.
-        </h3>
-        <div className="result-comparison">
+      <section className="warehouse-hunt" aria-labelledby="hunt-title">
+        <div className="warehouse-hud">
           <div>
-            <span>YOUR TRADE</span>
+            <span>SHIPMENT</span>
             <strong>
-              {game.trade
-                ? `[${game.trade.buyIndex} → ${game.trade.sellIndex}]`
-                : "NO TRADE"}
+              {game.shipmentIndex + 1}/{warehouseShipments.length}
             </strong>
-            <small>{formatProfit(game.profit)}</small>
           </div>
-          <div className="is-optimal">
-            <span>{resultCanRetry ? "SOLUTION" : "BEST POSSIBLE"}</span>
-            <strong>
-              {resultCanRetry
-                ? "HIDDEN FOR RETRY"
-                : optimal.buyIndex === null
-                  ? "NO TRADE"
-                  : `[${optimal.buyIndex} → ${optimal.sellIndex}]`}
-            </strong>
-            <small>
-              {resultCanRetry ? "TRY AGAIN" : formatProfit(optimal.profit)}
-            </small>
-          </div>
-        </div>
-        <p>{game.reaction}</p>
-        <div className="result-actions">
-          {resultCanRetry ? (
-            <button
-              type="button"
-              className="button button-secondary"
-              onClick={handleRetry}
-              tabIndex={step === 2 ? 0 : -1}
+          <div>
+            <span>SCANNER</span>
+            <strong
+              role="img"
+              aria-label={`${game.run.batteries} scanner charges left`}
             >
-              Retry this market
-            </button>
-          ) : null}
+              {Array.from({ length: shipment.scanBudget }, (_, index) => (
+                <i
+                  aria-hidden="true"
+                  className={index < game.run.batteries ? "is-live" : ""}
+                  key={index}
+                />
+              ))}
+            </strong>
+          </div>
+          <div>
+            <span>BONUS CLOCK</span>
+            <strong>{shipment.bonusSeconds ? `${bonusSeconds}s` : "PRACTICE"}</strong>
+          </div>
+          <div>
+            <span>SCORE</span>
+            <strong>{visibleScore}</strong>
+          </div>
           <button
             type="button"
-            className="button button-primary"
-            onClick={handleStartDebrief}
-            tabIndex={step === 2 ? 0 : -1}
+            className="warehouse-sound"
+            aria-pressed={soundOn}
+            onClick={handleToggleSound}
           >
-            See how Bit guarantees it
+            {soundOn ? "Sound on" : "Sound off"}
           </button>
         </div>
-      </div>
-    );
-  }
 
-  function renderDebriefThought() {
-    if (!game.debrief) return null;
-    const price = prices[game.debrief.index];
-    const maxChanged =
-      game.debrief.resolved && game.debrief.lastAction === "max";
-    return (
-      <div
-        className="bit-thought-content debrief-thought"
-        key={`debrief-${game.debrief.index}-${game.debrief.resolved}`}
-      >
-        <span className="decision-kicker">ONE-PASS REPLAY · INDEX {game.debrief.index}</span>
-        <h3>“Today is ${price}. Which memory should I change?”</h3>
-        <div className="bit-memory bit-memory--algorithm">
+        <div className="warehouse-mission-line">
           <div>
-            <span>MIN PRICE</span>
-            <strong>
-              ${game.debrief.minPrice} <small>@ {game.debrief.minIndex}</small>
-            </strong>
+            <span className="warehouse-kicker">{shipment.title}</span>
+            <h2 id="hunt-title">Find P-{shipment.target}</h2>
           </div>
-          <div>
-            <span>TODAY − MIN</span>
-            <strong>{formatProfit(debriefCandidate)}</strong>
+          <div className="mission-bit">
+            <BitMascot mood={game.run.lastScan ? "scan" : "ready"} />
+            <p>Tap a sealed shelf. One scan can clear an entire side.</p>
+          </div>
+        </div>
+
+        <div className="warehouse-rack-frame">
+          <div className="rack-signage" aria-hidden="true">
+            <span>LOW PARCEL IDS</span>
+            <i />
+            <span>HIGH PARCEL IDS</span>
           </div>
           <div
-            className={`memory-max ${maxChanged ? "is-new-record" : ""}`}
-            key={`debrief-record-${game.recordPulseId}`}
+            className={`warehouse-racks rack-count-${shipment.shelves.length}`}
+            role="group"
+            aria-label={`Ordered rack with ${shipment.shelves.length} sealed shelves`}
+            ref={rackRef}
           >
-            <span>MAX SO FAR</span>
-            <strong>${game.debrief.maxProfit}</strong>
-            {maxChanged ? <em>NEW RECORD</em> : null}
+            {shipment.shelves.map((value: number, index: number) => {
+              const scanned = game.run.scannedIndices.includes(index);
+              const active =
+                game.run.status === "searching" &&
+                index >= game.run.low &&
+                index <= game.run.high &&
+                !scanned;
+              const eliminated = index < game.run.low || index > game.run.high;
+              const current = game.run.lastScan?.index === index;
+              const found = current && value === shipment.target;
+              return (
+                <button
+                  type="button"
+                  className={[
+                    "warehouse-shelf",
+                    active ? "is-active" : "",
+                    scanned ? "is-scanned" : "",
+                    eliminated ? "is-cleared" : "",
+                    current ? "is-current" : "",
+                    found ? "is-found" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  disabled={!active}
+                  data-shelf-index={index}
+                  aria-label={
+                    scanned
+                      ? `Shelf ${index + 1}, scanned parcel ${value}`
+                      : eliminated
+                        ? `Shelf ${index + 1}, cleared`
+                        : `Shelf ${index + 1}, sealed`
+                  }
+                  onClick={handleShelfClick}
+                  onKeyDown={handleShelfKeyDown}
+                  key={`${shipment.id}-${index}`}
+                >
+                  {current ? <span className="scanner-beam" /> : null}
+                  <small>S{String(index + 1).padStart(2, "0")}</small>
+                  <strong>{scanned ? `P-${value}` : "?"}</strong>
+                  <em>
+                    {found ? "SECURED" : eliminated ? "CLEARED" : "SEALED"}
+                  </em>
+                </button>
+              );
+            })}
           </div>
         </div>
-        <p className="debrief-feedback" role="status">
-          {game.debrief.feedback}
-        </p>
-        {!game.debrief.resolved ? (
-          <div className="debrief-actions">
-            <button
-              type="button"
-              onClick={() => handleDebriefChoice("min")}
-              tabIndex={step === 2 ? 0 : -1}
-            >
-              <span>LOWER PRICE?</span>
-              Replace min
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDebriefChoice("max")}
-              tabIndex={step === 2 ? 0 : -1}
-            >
-              <span>BETTER PROFIT?</span>
-              Update max
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDebriefChoice("keep")}
-              tabIndex={step === 2 ? 0 : -1}
-            >
-              <span>NO RECORD</span>
-              Keep memory
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            className="button button-primary debrief-next"
-            onClick={handleDebriefNext}
-            tabIndex={step === 2 ? 0 : -1}
-          >
-            {game.debrief.index === prices.length - 1
-              ? "Finish the replay"
-              : `Move to index ${game.debrief.index + 1}`}
-          </button>
-        )}
-      </div>
+
+        <div className="warehouse-status" role="status" aria-live="polite" aria-atomic="true">
+          <span>DISPATCH</span>
+          <p>{game.reaction}</p>
+        </div>
+      </section>
     );
   }
 
-  function renderDebriefCompleteThought() {
-    const earnedStars = game.progress[game.levelIndex].bestStars;
+  function renderShipmentResult() {
+    const found = game.run.status === "found";
+    const result = game.results.at(-1);
     return (
-      <div className="bit-thought-content result-thought" key="debrief-complete">
-        <span className="decision-kicker">
-          {canAdvanceFromLevel
-            ? "RULE LEARNED · LEVEL COMPLETE"
-            : "RULE LEARNED · ONE MORE TRY"}
+      <section className={`shipment-result ${found ? "is-win" : "is-fail"}`}>
+        <BitMascot mood={found ? "win" : "ready"} />
+        <span className="warehouse-kicker">
+          {found ? "PARCEL SECURED" : "SCANNER EMPTY"}
         </span>
-        <div
-          className="result-stars"
-          role="img"
-          aria-label={`${earnedStars} out of 3 stars`}
-        >
-          {[0, 1, 2].map((star) => (
-            <span
-              className={star < earnedStars ? "is-earned" : ""}
-              aria-hidden="true"
-              key={star}
-            >
-              ★
-            </span>
-          ))}
-        </div>
-        <h3>
-          Bit can guarantee <strong>{formatProfit(optimal.profit)}</strong>.
-        </h3>
+        <h2 ref={stageFocusRef} tabIndex={-1}>
+          {found
+            ? `P-${shipment.target} made the truck.`
+            : `P-${shipment.target} is still in the racks.`}
+        </h2>
         <p>
-          Remember the lowest price seen. Compare today with that minimum. Save
-          only a profit that beats maxProfit.
+          {found
+            ? `Bit found it in ${result?.scans ?? game.run.history.length} scans with ${result?.unusedBatteries ?? 0} charge left.`
+            : "Choose scans that remove the largest possible section. Your next scanner is ready."}
         </p>
-        <div className="algorithm-rule">
-          <code>minPrice = min(minPrice, today)</code>
-          <code>maxProfit = max(maxProfit, today − minPrice)</code>
+        <div className="shipment-result-stats">
+          <div>
+            <span>SCANS</span>
+            <strong>{game.run.history.length}/{shipment.scanBudget}</strong>
+          </div>
+          <div>
+            <span>SHIFT SCORE</span>
+            <strong>{visibleScore}</strong>
+          </div>
         </div>
         <button
           type="button"
-          className="button button-primary"
-          onClick={handleNextLevel}
-          tabIndex={step === 2 ? 0 : -1}
+          className="button button-primary button-large"
+          onClick={() => {
+            if (found) {
+              playSound("win");
+              dispatch({ type: "NEXT_SHIPMENT" });
+            } else {
+              playSound("scan");
+              dispatch({ type: "RETRY_SHIPMENT" });
+            }
+          }}
         >
-          {canAdvanceFromLevel
-            ? game.levelIndex === challengeLevels.length - 1
-              ? "Replay from level 1"
-              : "Play the next market"
-            : "Retry this market"}
+          {found
+            ? game.shipmentIndex === warehouseShipments.length - 1
+              ? "Close the shift"
+              : "Load next shipment"
+            : "Retry shipment"}
         </button>
-      </div>
+      </section>
+    );
+  }
+
+  function renderShiftResult() {
+    const summary = game.summary;
+    return (
+      <section className="shift-result">
+        <div className="shift-result-celebration" aria-hidden="true">
+          <BitMascot mood="win" />
+          <span>✓</span>
+        </div>
+        <span className="warehouse-kicker">SHIFT CLEARED · TRUCK 07 DEPARTED</span>
+        <h2 ref={stageFocusRef} tabIndex={-1}>Three parcels. One sharp instinct.</h2>
+        <div
+          className="warehouse-stars"
+          role="img"
+          aria-label={`${summary?.stars ?? 1} out of 3 stars`}
+        >
+          {[0, 1, 2].map((star) => (
+            <span className={star < (summary?.stars ?? 1) ? "is-earned" : ""} key={star}>
+              ★
+            </span>
+          ))}
+        </div>
+        <div className="shift-score-grid">
+          <div><span>SCORE</span><strong>{summary?.score ?? visibleScore}</strong></div>
+          <div><span>TOTAL SCANS</span><strong>{summary?.totalScans ?? 0}</strong></div>
+          <div><span>RETRIES</span><strong>{game.failures}</strong></div>
+          <div><span>BEST</span><strong>{Math.max(game.bestScore, summary?.score ?? 0)}</strong></div>
+        </div>
+        <p>
+          You did not need every shelf. Now see the repeatable strategy hiding
+          inside your choices.
+        </p>
+        <div className="shift-result-actions">
+          <button
+            type="button"
+            className="button button-primary button-large"
+            onClick={() => dispatch({ type: "START_REVEAL" })}
+          >
+            Reveal Bit&apos;s trick <span aria-hidden="true">→</span>
+          </button>
+          <button
+            type="button"
+            className="button button-secondary"
+            onClick={() => dispatch({ type: "RESTART" })}
+          >
+            Run the shift again
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  function renderReveal() {
+    const playerRun = game.results.at(-1);
+    const playerHistory = playerRun?.history ?? [];
+    const showingPlayerRoute = game.revealStep === 0 && playerHistory.length > 0;
+    const canonicalProgress = [0, Math.floor((trace.length - 1) / 2), trace.length - 1];
+    const canonicalFrameIndex = canonicalProgress[
+      Math.max(0, game.revealStep - 1)
+    ];
+    const visibleReplay = showingPlayerRoute
+      ? playerHistory
+      : trace.slice(0, canonicalFrameIndex + 1);
+    const activeReplayFrame = visibleReplay.at(-1);
+    const activeIndex = showingPlayerRoute
+      ? (activeReplayFrame as ScanRecord | undefined)?.index
+      : (activeReplayFrame as { mid: number } | undefined)?.mid;
+    const activeLow = activeReplayFrame?.lowAfter ?? 0;
+    const activeHigh = activeReplayFrame?.highAfter ?? finalShipment.shelves.length - 1;
+    const checkedIndices = new Set(
+      visibleReplay.map((frame) =>
+        showingPlayerRoute
+          ? (frame as ScanRecord).index
+          : (frame as { mid: number }).mid,
+      ),
+    );
+    const revealCopy = [
+      {
+        kicker: playerHistory.length
+          ? "YOUR SHIFT, REPLAYED"
+          : "YOUR CLEARED SHIFT",
+        title: playerHistory.length
+          ? "This is the route you actually took."
+          : "You searched a fraction of the warehouse.",
+        body: playerHistory.length
+          ? `${finalShipment.shelves.length} shelves were waiting. Your ${playerRun?.scans} scans are highlighted in the order you played them.`
+          : "Your win is saved. Bit rebuilt a clean route so you can inspect the strategy behind it.",
+      },
+      {
+        kicker: "THE REPEATABLE TRICK",
+        title: "A centered scan protects you from the worst case.",
+        body: "Compare one parcel, discard the side that cannot contain the target, then center the scanner in what remains.",
+      },
+      {
+        kicker: "PATTERN UNLOCKED",
+        title: "That strategy is Binary Search.",
+        body: "It turns a sorted warehouse into a shrinking search range instead of a shelf-by-shelf hunt.",
+      },
+      {
+        kicker: "WHY IT SCALES",
+        title: "31 shelves → 5 scans. 1,023 shelves → 10.",
+        body: "Each comparison removes roughly half of the remaining work. That growth rate is O(log n).",
+      },
+    ][game.revealStep];
+
+    return (
+      <section className="warehouse-reveal" aria-labelledby="reveal-title">
+        <div className="reveal-copy">
+          <span className="warehouse-kicker">{revealCopy.kicker}</span>
+          <h2
+            id="reveal-title"
+            ref={stageFocusRef}
+            tabIndex={-1}
+            aria-live="polite"
+          >
+            {revealCopy.title}
+          </h2>
+          <p>{revealCopy.body}</p>
+          {game.revealStep >= 2 ? (
+            <div className="pattern-name">
+              <span>LEETCODE 704</span>
+              <strong>BINARY SEARCH</strong>
+            </div>
+          ) : null}
+          <button
+            type="button"
+            className="button button-primary button-large"
+            onClick={() => dispatch({ type: "NEXT_REVEAL" })}
+          >
+            {game.revealStep === 3 ? "Write the strategy" : "Continue"}
+            <span aria-hidden="true">→</span>
+          </button>
+        </div>
+
+        <div className="reveal-board">
+          <div className="reveal-range-labels">
+            <span>left</span>
+            <span>{showingPlayerRoute ? "your route" : "repeatable route"}</span>
+            <span>right</span>
+          </div>
+          <div
+            className="reveal-shelves"
+            aria-label={showingPlayerRoute ? "Your shelf scan replay" : "Strategy replay"}
+          >
+            {finalShipment.shelves.map((value: number, index: number) => {
+              const checkedOrder = visibleReplay.findIndex((frame) =>
+                showingPlayerRoute
+                  ? (frame as ScanRecord).index === index
+                  : (frame as { mid: number }).mid === index,
+              );
+              const outside =
+                index < activeLow || index > activeHigh;
+              return (
+                <span
+                  className={[
+                    checkedIndices.has(index) ? "is-checked" : "",
+                    outside ? "is-discarded" : "",
+                    index === activeIndex ? "is-middle" : "",
+                  ].filter(Boolean).join(" ")}
+                  key={index}
+                >
+                  <small>
+                    {checkedOrder >= 0 ? `SCAN ${checkedOrder + 1}` : index}
+                  </small>
+                  <strong>{value}</strong>
+                </span>
+              );
+            })}
+          </div>
+          <div className="concept-mapping">
+            <div><span>WAREHOUSE</span><strong>sorted array</strong></div>
+            <div><span>ACTIVE RACK</span><strong>left ↔ right</strong></div>
+            <div><span>SAFEST SCAN</span><strong>middle</strong></div>
+            <div><span>CLEARED SIDE</span><strong>discard half</strong></div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  function renderPython() {
+    const errors = game.codeEvaluation?.slotErrors ?? {};
+    return (
+      <section className="python-bridge" aria-labelledby="python-title">
+        <div className="python-copy">
+          <span className="warehouse-kicker">FROM INSTINCT TO PYTHON</span>
+          <h2 id="python-title" ref={stageFocusRef} tabIndex={-1}>
+            Code the shift you just mastered.
+          </h2>
+          <p>
+            The warehouse loop is already here. Complete the three lines that
+            choose the center and clear either side.
+          </p>
+          <div className="python-test-summary" aria-live="polite">
+            <span>ATTEMPT {game.codeAttempts + 1}</span>
+            <strong>
+              {game.codeEvaluation
+                ? game.codeEvaluation.passed
+                  ? "ALL TESTS PASSED"
+                  : "KEEP DEBUGGING"
+                : "MISSION TESTS READY"}
+            </strong>
+          </div>
+          {game.codeEvaluation ? (
+            <div className="python-cases" role="list" aria-label="Code test results">
+              {game.codeEvaluation.cases.map((testCase) => (
+                <div className={testCase.passed ? "is-pass" : "is-fail"} role="listitem" key={testCase.name}>
+                  <span>{testCase.passed ? "✓" : "×"}</span>
+                  <strong>{testCase.name}</strong>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <div
+          className="python-editor"
+          aria-label="Guided Python editor"
+          ref={pythonEditorRef}
+        >
+          <div className="python-editor-bar">
+            <span><i /> find_parcel.py</span>
+            <small>PYTHON</small>
+          </div>
+          <div className="python-code">
+            <code><b>def</b> binary_search(shelves, target):</code>
+            <code>    left, right = 0, len(shelves) - 1</code>
+            <code>    <b>while</b> left &lt;= right:</code>
+            <label className={errors.mid ? "has-error" : ""}>
+              <span>        mid = </span>
+              <input
+                value={game.code.mid}
+                onChange={(event) => dispatch({ type: "SET_CODE", slot: "mid", value: event.target.value })}
+                placeholder="center expression"
+                aria-label="Python expression for the middle shelf"
+                aria-describedby={errors.mid ? "mid-error" : undefined}
+              />
+            </label>
+            {errors.mid ? <small id="mid-error">{errors.mid}</small> : null}
+            <code>        <b>if</b> shelves[mid] == target:</code>
+            <code>            <b>return</b> mid</code>
+            <code>        <b>if</b> shelves[mid] &lt; target:</code>
+            <label className={errors.left ? "has-error" : ""}>
+              <span>            </span>
+              <input
+                value={game.code.left}
+                onChange={(event) => dispatch({ type: "SET_CODE", slot: "left", value: event.target.value })}
+                placeholder="move the left edge"
+                aria-label="Python line for moving the left edge"
+                aria-describedby={errors.left ? "left-error" : undefined}
+              />
+            </label>
+            {errors.left ? <small id="left-error">{errors.left}</small> : null}
+            <code>        <b>else</b>:</code>
+            <label className={errors.right ? "has-error" : ""}>
+              <span>            </span>
+              <input
+                value={game.code.right}
+                onChange={(event) => dispatch({ type: "SET_CODE", slot: "right", value: event.target.value })}
+                placeholder="move the right edge"
+                aria-label="Python line for moving the right edge"
+                aria-describedby={errors.right ? "right-error" : undefined}
+              />
+            </label>
+            {errors.right ? <small id="right-error">{errors.right}</small> : null}
+            <code>    <b>return</b> -1</code>
+          </div>
+          <div className="python-editor-actions">
+            {game.codeAttempts >= 2 ? (
+              <button type="button" className="button button-secondary" onClick={() => dispatch({ type: "SHOW_SOLUTION" })}>
+                Show assisted solution
+              </button>
+            ) : <span />}
+            <button type="button" className="button button-primary" onClick={handleRunCode}>
+              Run mission tests <span aria-hidden="true">▶</span>
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  function renderComplete() {
+    const summary = game.summary;
+    return (
+      <section className="mastery-complete">
+        <div className="mastery-badge" aria-hidden="true">
+          <BitMascot mood="win" />
+          <span>704</span>
+        </div>
+        <span className="warehouse-kicker">MISSION MASTERED</span>
+        <h2 ref={stageFocusRef} tabIndex={-1}>
+          You played it. You named it. You coded it.
+        </h2>
+        <p>
+          Binary Search now has a real memory attached to it: scan the center,
+          clear half the warehouse, and repeat.
+        </p>
+        <div className="mastery-stats">
+          <div><span>SHIFT SCORE</span><strong>{summary?.score ?? game.bestScore}</strong></div>
+          <div><span>CODE ATTEMPTS</span><strong>{game.codeAttempts}</strong></div>
+          <div><span>COMPLEXITY</span><strong>O(log n)</strong></div>
+        </div>
+        <pre aria-label="Completed Python Binary Search solution"><code>{`def binary_search(shelves, target):
+    left, right = 0, len(shelves) - 1
+    while left <= right:
+        mid = left + (right - left) // 2
+        if shelves[mid] == target:
+            return mid
+        if shelves[mid] < target:
+            left = mid + 1
+        else:
+            right = mid - 1
+    return -1`}</code></pre>
+        <div className="mastery-actions">
+          <button type="button" className="button button-secondary" onClick={() => dispatch({ type: "RESTART" })}>
+            Replay Warehouse Hunt
+          </button>
+          <a
+            className="button button-primary"
+            href="https://leetcode.com/problems/binary-search/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Solve LeetCode 704 <span aria-hidden="true">↗</span>
+          </a>
+        </div>
+      </section>
     );
   }
 
   return (
-    <div className="product-frame concept-frame">
+    <div className="product-frame concept-frame warehouse-frame">
       <div className="product-toolbar">
-        <div className="traffic-lights" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </div>
-        <div className="product-title">
-          <span className="status-dot" />
-          Challenge #122 · Stock Trading
-        </div>
-        <span className="toolbar-meta">STEP {step + 1} / 03</span>
+        <div className="traffic-lights" aria-hidden="true"><span /><span /><span /></div>
+        <div className="product-title"><span className="status-dot" />Warehouse Hunt · Dispatch 07</div>
+        <button
+          type="button"
+          className="toolbar-sound"
+          aria-label={soundOn ? "Turn game sound off" : "Turn game sound on"}
+          aria-pressed={soundOn}
+          onClick={handleToggleSound}
+        >
+          {soundOn ? "◖))" : "◖×"}
+        </button>
       </div>
 
-      <div className="concept-progress" aria-label="Walkthrough progress">
-        {["Problem", "Rules", "Play"].map((label, index) => (
-          <button
-            type="button"
-            className={index === step ? "is-current" : ""}
-            aria-current={index === step ? "step" : undefined}
-            onClick={() => goTo(index)}
+      <ol className="warehouse-stage-rail" aria-label="Learning journey">
+        {stageLabels.map((label, index) => (
+          <li
+            className={index === currentStageIndex ? "is-current" : index < currentStageIndex ? "is-complete" : ""}
+            aria-current={index === currentStageIndex ? "step" : undefined}
             key={label}
           >
-            <span>{String(index + 1).padStart(2, "0")}</span>
+            <span>{index < currentStageIndex ? "✓" : String(index + 1).padStart(2, "0")}</span>
             {label}
-          </button>
+          </li>
         ))}
-      </div>
+      </ol>
 
-      <div className="concept-viewport">
-        <div
-          className="concept-track"
-          style={{ transform: `translateX(-${step * 100}%)` }}
-        >
-          <section
-            className="concept-slide problem-slide"
-            aria-hidden={step !== 0}
-          >
-            <div className="problem-copy">
-              <div className="challenge-tags">
-                <span>Easy</span>
-                <span>Array · Greedy</span>
-              </div>
-              <p className="game-kicker">The interview problem</p>
-              <h2>Best Time to Buy and Sell Stock</h2>
-              <p>
-                Choose one day to buy and one later day to sell. Make the
-                highest possible profit—or return zero when every trade loses.
-              </p>
-              <button
-                type="button"
-                className="button button-primary button-large concept-next"
-                onClick={() => goTo(1)}
-                tabIndex={step === 0 ? 0 : -1}
-              >
-                Learn the rules <span aria-hidden="true">→</span>
-              </button>
-            </div>
-
-            <div className="problem-example">
-              <span className="example-label">EXAMPLE 01</span>
-              <div className="example-row">
-                <span>Input</span>
-                <code>prices = [7, 1, 5, 3, 6, 4]</code>
-              </div>
-              <div className="example-row">
-                <span>Output</span>
-                <code>5</code>
-              </div>
-              <div className="price-strip" aria-label="Prices by day">
-                {examplePrices.map((price, index) => (
-                  <div
-                    className={
-                      index === 1
-                        ? "is-buy"
-                        : index === 4
-                          ? "is-sell"
-                          : ""
-                    }
-                    key={`${price}-${index}`}
-                  >
-                    <small>D{index + 1}</small>
-                    <strong>${price}</strong>
-                  </div>
-                ))}
-              </div>
-              <p>
-                Buy on day 2 at <strong>$1</strong>. Sell on day 5 at{" "}
-                <strong>$6</strong>. Profit: <strong>$5</strong>.
-              </p>
-            </div>
-          </section>
-
-          <section
-            className="concept-slide thinking-slide rules-slide"
-            aria-hidden={step !== 1}
-          >
-            <div className="thinking-intro">
-              <p className="game-kicker">Your mission</p>
-              <h2>The future stays hidden.</h2>
-              <p>
-                Bit reveals one array value at a time. You may buy once, sell
-                once, or make no trade. Your choices are judged only when the
-                market closes—there is no fake “wrong” answer before then.
-              </p>
-            </div>
-
-            <div className="thinking-compare">
-              <article className="thinking-card thinking-card--human">
-                <div className="thinking-card-heading">
-                  <span>WHAT YOU SEE</span>
-                  <strong>Only the revealed past</strong>
-                </div>
-                <div className="human-prices hidden-prices" aria-hidden="true">
-                  {[8, 3, "?", "?", "?", "?"].map((price, index) => (
-                    <span className={index === 1 ? "is-buy" : ""} key={index}>
-                      {price}
-                    </span>
-                  ))}
-                </div>
-                <p>“Do I lock this price—or risk waiting for something better?”</p>
-              </article>
-
-              <article className="thinking-card thinking-card--machine">
-                <div className="thinking-card-heading">
-                  <span>YOUR CONTROLS</span>
-                  <strong>One trade. Three attempts.</strong>
-                </div>
-                <div className="rule-actions" aria-hidden="true">
-                  <span>BUY</span>
-                  <span>WAIT</span>
-                  <span>HOLD</span>
-                  <span>SELL</span>
-                </div>
-                <p>
-                  First play by instinct. After the round, teach Bit the rule
-                  that guarantees the answer.
-                </p>
-              </article>
-            </div>
-
-            <div className="concept-slide-actions">
-              <button
-                type="button"
-                className="button button-secondary"
-                onClick={() => goTo(0)}
-                tabIndex={step === 1 ? 0 : -1}
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                className="button button-primary button-large"
-                onClick={() => goTo(2)}
-                tabIndex={step === 1 ? 0 : -1}
-              >
-                Open the market <span aria-hidden="true">→</span>
-              </button>
-            </div>
-          </section>
-
-          <section
-            className="concept-slide play-slide market-play-slide"
-            aria-hidden={step !== 2}
-          >
-            <div className="market-game-header">
-              <div>
-                <span className="game-kicker">
-                  Level {game.levelIndex + 1} · {level.title}
-                </span>
-                <h2>Can you beat the market?</h2>
-                <p>{level.lesson} Future prices stay hidden until Bit moves.</p>
-              </div>
-              <div className="market-stats" aria-label="Current game statistics">
-                <div>
-                  <span>ATTEMPT</span>
-                  <strong>{game.attempt}/3</strong>
-                </div>
-                <div>
-                  <span>CURRENT</span>
-                  <strong>{formatProfit(displayedProfit)}</strong>
-                </div>
-                <div>
-                  <span>BEST RUN</span>
-                  <strong>{formatProfit(bestAttemptProfit)}</strong>
-                </div>
-                <div>
-                  <span>SCORE</span>
-                  <strong>{game.score}</strong>
-                </div>
-              </div>
-              <div
-                className="market-progress"
-                aria-label={`${daysReached} of ${prices.length} days reached`}
-              >
-                <span
-                  style={{
-                    width: `${(daysReached / prices.length) * 100}%`,
-                  }}
-                />
-              </div>
-              <div className="game-tools">
-                <button
-                  type="button"
-                  className="sound-toggle"
-                  aria-pressed={soundOn}
-                  onClick={handleToggleSound}
-                  tabIndex={step === 2 ? 0 : -1}
-                >
-                  <span aria-hidden="true">{soundOn ? "◖))" : "◖×"}</span>
-                  Sound {soundOn ? "on" : "off"}
-                </button>
-                <button
-                  type="button"
-                  className="concept-back-link"
-                  onClick={() => goTo(1)}
-                  tabIndex={step === 2 ? 0 : -1}
-                >
-                  ← Review rules
-                </button>
-              </div>
-            </div>
-
-            <nav className="level-path" aria-label="Market levels">
-              {challengeLevels.map((challenge, index) => {
-                const progress = game.progress[index];
-                const canSelect =
-                  progress.unlocked &&
-                  index !== game.levelIndex &&
-                  game.view === "debrief-complete";
-                return (
-                  <button
-                    type="button"
-                    className={[
-                      index === game.levelIndex ? "is-current" : "",
-                      progress.completed ? "is-complete" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    disabled={!canSelect}
-                    onClick={() => {
-                      playSound("move");
-                      dispatch({ type: "SELECT_LEVEL", levelIndex: index });
-                      queueThoughtSound();
-                    }}
-                    tabIndex={step === 2 ? 0 : -1}
-                    aria-label={`${challenge.title}${
-                      progress.completed
-                        ? ", complete"
-                        : progress.unlocked
-                          ? ", unlocked"
-                          : ", locked"
-                    }`}
-                    key={challenge.id}
-                  >
-                    <span>{progress.completed ? "✓" : index + 1}</span>
-                    <small>{challenge.title}</small>
-                  </button>
-                );
-              })}
-            </nav>
-
-            <div className="market-arena">
-              <div className="market-scroll" ref={marketScrollRef}>
-                <div className="market-track">
-                  <div
-                    className={`bit-rig ${rigAlignment}`}
-                    style={{ left: `${activePercent}%` }}
-                    role="group"
-                    aria-label={`Bit is at index ${activeIndex}`}
-                  >
-                    <div
-                      className="bit-thought"
-                      ref={bitThoughtRef}
-                      tabIndex={-1}
-                    >
-                      {game.view === "challenge"
-                        ? renderChallengeThought()
-                        : game.view === "result"
-                          ? renderResultThought()
-                          : game.view === "debrief"
-                            ? renderDebriefThought()
-                            : renderDebriefCompleteThought()}
-                    </div>
-                    {renderMascot()}
-                  </div>
-
-                  <div
-                    className="market-array"
-                    role="list"
-                    aria-label="Stock price array"
-                    style={{
-                      gridTemplateColumns: `repeat(${prices.length}, minmax(68px, 1fr))`,
-                    }}
-                  >
-                    {prices.map((price, index) => {
-                      const showAll = revealSolution;
-                      const revealed =
-                        showAll ||
-                        index <= game.currentIndex ||
-                        index <= game.revealedThrough;
-                      const remembered =
-                        game.view === "challenge" &&
-                        index > game.currentIndex &&
-                        index <= game.revealedThrough;
-                      const isOptimal =
-                        showAll &&
-                        (index === optimal.buyIndex ||
-                          index === optimal.sellIndex);
-                      const isDebriefMin =
-                        game.view === "debrief" &&
-                        index === game.debrief?.minIndex;
-                      return (
-                        <div
-                          className={[
-                            "market-cell",
-                            !revealed ? "is-hidden" : "",
-                            remembered ? "is-memory" : "",
-                            index === activeIndex ? "is-current" : "",
-                            index ===
-                            (game.holding?.buyIndex ?? game.trade?.buyIndex)
-                              ? "is-bought"
-                              : "",
-                            index === game.trade?.sellIndex ? "is-sold" : "",
-                            isOptimal ? "is-optimal" : "",
-                            isDebriefMin ? "is-min" : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
-                          role="listitem"
-                          aria-label={
-                            revealed
-                              ? `Index ${index}, stock price $${price}`
-                              : `Index ${index}, price hidden`
-                          }
-                          key={`${level.id}-${index}`}
-                        >
-                          <small>INDEX {index}</small>
-                          <strong>{revealed ? `$${price}` : "?"}</strong>
-                          <em>
-                            {index ===
-                            (game.holding?.buyIndex ?? game.trade?.buyIndex)
-                              ? "BOUGHT"
-                              : index === game.trade?.sellIndex
-                                ? "SOLD"
-                                : isDebriefMin
-                                  ? "MIN"
-                                  : !revealed
-                                    ? "LOCKED"
-                                    : ""}
-                          </em>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div
-              className="market-narrator"
-              role={game.view === "debrief" ? undefined : "status"}
-              aria-live={game.view === "debrief" ? undefined : "polite"}
-            >
-              <span>BIT SAYS</span>
-              <p>{game.reaction}</p>
-            </div>
-
-            {game.attemptHistory.length > 0 ? (
-              <div className="attempt-history">
-                <span>RUN HISTORY</span>
-                <div
-                  className="attempt-trail"
-                  role="list"
-                  aria-label="Attempt history"
-                >
-                  {game.attemptHistory.map((attempt) => (
-                    <div role="listitem" key={attempt.attempt}>
-                      <small>TRY {attempt.attempt}</small>
-                      <strong>{formatProfit(attempt.profit)}</strong>
-                      <em>{"★".repeat(attempt.stars) || "—"}</em>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </section>
-        </div>
+      <div className="warehouse-stage">
+        {game.stage === "briefing" ? renderBriefing() : null}
+        {game.stage === "hunt" ? renderHunt() : null}
+        {game.stage === "shipment-result" ? renderShipmentResult() : null}
+        {game.stage === "shift-result" ? renderShiftResult() : null}
+        {game.stage === "reveal" ? renderReveal() : null}
+        {game.stage === "python" ? renderPython() : null}
+        {game.stage === "complete" ? renderComplete() : null}
       </div>
     </div>
   );

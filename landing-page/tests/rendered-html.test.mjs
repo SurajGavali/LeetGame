@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import "./binary-search-engine.test.mjs";
+
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
@@ -33,23 +35,25 @@ test("server-renders the LeetGame landing page", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>LeetGame — Feel how algorithms work<\/title>/i);
-  assert.match(html, /Don&#x27;t just solve it/);
-  assert.match(html, /Feel how it works/);
-  assert.match(html, /Challenge #122/);
-  assert.match(html, /Best Time to Buy and Sell Stock/);
-  assert.match(html, /The future stays hidden\./);
-  assert.match(html, /Can you beat the market\?/);
-  assert.match(html, /Clear Valley/);
-  assert.match(html, /DAY <!-- -->1<!-- --> · PRICE REVEALED/);
-  assert.match(html, /MAX SO FAR/);
-  assert.match(html, /Buy for \$<!-- -->8/);
-  assert.match(html, /REVEAL NEXT DAY/);
-  assert.match(html, /price hidden/);
+  assert.match(
+    html,
+    /<title>LeetGame — Play the problem\. Code the pattern\.<\/title>/i,
+  );
+  assert.match(html, /Play the problem/);
+  assert.match(html, /Code the pattern/);
+  assert.match(html, /Warehouse Hunt/);
+  assert.match(html, /Find the parcel before the scanner dies\./);
+  assert.match(html, /Clock in/);
+  assert.match(html, /3 shipments/);
+  assert.match(html, /7 → 15 → 31 racks/);
+  assert.match(html, /RUSH MANIFEST/);
+  assert.match(html, /FIND P-<!-- -->\d+/);
+  assert.match(html, /No lecture before the win\./);
   assert.match(html, /aria-pressed="true"/);
-  assert.doesNotMatch(html, /AUTO SKIP/);
-  assert.doesNotMatch(html, /Tell Bit: update/);
-  assert.match(html, /Reverse Integer/);
+  assert.doesNotMatch(html, /Best Time to Buy and Sell Stock/);
+  assert.doesNotMatch(html, /MAX SO FAR/);
+  assert.doesNotMatch(html, /Can you beat the market\?/);
+  assert.doesNotMatch(html, /BINARY SEARCH/);
   assert.match(html, /\/leetgame-symbol\.svg/);
   assert.match(html, /https:\/\/leetgame\.example\/og\.png/);
 });

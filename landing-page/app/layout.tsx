@@ -25,22 +25,22 @@ export async function generateMetadata(): Promise<Metadata> {
   const metadataBase = new URL(`${protocol}://${host}`);
 
   return {
-    title: "LeetGame — Feel how algorithms work",
+    title: "LeetGame — Play the problem. Code the pattern.",
     description:
-      "LeetGame turns data structures and algorithms into tactile, constraint-driven puzzles for interview learners.",
+      "LeetGame turns real-world missions into playable algorithm lessons: win first, reveal the strategy, then carry it into code.",
     metadataBase,
     openGraph: {
-      title: "LeetGame — Feel how algorithms work",
+      title: "LeetGame — Play the problem. Code the pattern.",
       description:
-        "Learn to think in states, steps, and constraints before writing code.",
+        "Play a real mission, reveal the algorithm you discovered, and carry the pattern into code.",
       type: "website",
       images: [{ url: "/og.png", width: 1200, height: 630 }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "LeetGame — Feel how algorithms work",
+      title: "LeetGame — Play the problem. Code the pattern.",
       description:
-        "Learn to think in states, steps, and constraints before writing code.",
+        "Play a real mission, reveal the algorithm you discovered, and carry the pattern into code.",
       images: ["/og.png"],
     },
     icons: {
